@@ -866,4 +866,40 @@
             </div>`).join('');
 
       return `
-        <div class
+        <div class="vp-section">
+          <div class="vp-section-header">
+            <span class="vp-section-label">${opt.text}</span>
+            <span class="vp-section-count">${opt.voters.length}</span>
+          </div>
+          ${rowsHtml}
+        </div>`;
+    }).join('');
+
+    document.getElementById('votes-body').innerHTML = `
+      <div class="votes-question-block">
+        <p class="votes-question">${currentQuestion}</p>
+        <p class="votes-summary">${total} member${total !== 1 ? 's' : ''} voted</p>
+      </div>
+      ${sectionsHtml}`;
+  }
+
+  function openVotesPanel() {
+    renderVotesPanel();
+    document.getElementById('votes-panel').classList.add('show');
+    document.body.style.overflow = 'hidden';
+  }
+
+  function closeVotesPanel() {
+    document.getElementById('votes-panel').classList.remove('show');
+    document.body.style.overflow = '';
+  }
+
+  document.getElementById('open-votes').addEventListener('click', openVotesPanel);
+  document.getElementById('close-votes').addEventListener('click', closeVotesPanel);
+
+  // ── Init ─────────────────────────────────────────────────────────
+  loadPoll().then(startRefresh);
+</script>
+
+</body>
+</html>
