@@ -26,8 +26,7 @@
 
     /* ── Poll card ─────────────────────────────────────────── */
     .card {
-      background: #1c1c1c;
-      border-radius: 16px;
+      background: transparent;
       padding: 20px 20px 0;
       max-width: 420px;
       width: 100%;
@@ -59,7 +58,7 @@
     .vt-label { color: #8696a0; font-size: 13px; }
 
     /* ── Options ───────────────────────────────────────────── */
-    .option { cursor: pointer; user-select: none; -webkit-tap-highlight-color: transparent; }
+    .option { user-select: none; -webkit-tap-highlight-color: transparent; }
 
     .option-row {
       display: flex;
@@ -78,6 +77,7 @@
       flex-shrink: 0;
       display: flex; align-items: center; justify-content: center;
       transition: background 0.2s, border-color 0.2s;
+      cursor: pointer;
     }
 
     .radio.selected { background: #25d366; border-color: #25d366; }
@@ -88,12 +88,12 @@
       gap: 9px; flex-shrink: 0; margin-left: 12px;
     }
 
-    .badges { display: flex; align-items: center; }
+    .badges { display: flex; align-items: center; cursor: pointer; }
 
     .badge {
       width: 28px; height: 28px;
       border-radius: 50%;
-      border: 2px solid #1c1c1c;
+      border: 2px solid #111b21;
       display: flex; align-items: center; justify-content: center;
       font-size: 7.5px; color: #fff; font-weight: 700;
       position: relative; flex-shrink: 0;
@@ -403,7 +403,7 @@
             <rect x="1" y="5.5" width="10" height="8" rx="1.5" stroke="#e9edef" stroke-width="1.4"/>
             <path d="M4 5.5V4a2 2 0 0 1 4 0v1.5" stroke="#e9edef" stroke-width="1.4" stroke-linecap="round"/>
           </svg>
-          Admin
+          Admin — don't touch this
         </span>
         <button class="admin-close" id="close-admin">✕</button>
       </div>
@@ -612,9 +612,21 @@
       });
     }));
 
-    container.querySelectorAll('.option').forEach(el =>
-      el.addEventListener('click', () => handleVote(el.dataset.id))
-    );
+    container.querySelectorAll('.option').forEach(el => {
+      // Only the checkbox/radio triggers a vote
+      el.querySelector('.radio').addEventListener('click', e => {
+        e.stopPropagation();
+        handleVote(el.dataset.id);
+      });
+      // Tapping voter badge cluster opens the votes panel
+      const badgesEl = el.querySelector('.badges');
+      if (badgesEl) {
+        badgesEl.addEventListener('click', e => {
+          e.stopPropagation();
+          openVotesPanel();
+        });
+      }
+    });
   }
 
   // ── Vote logic ───────────────────────────────────────────────────
@@ -787,12 +799,31 @@
       .map(el => el.value.trim()).filter(Boolean);
     if (options.length === 0) { alert('Please add at least one option.'); return; }
 
+    // ── Optimistic: update locally and close instantly ─────────
+    currentQuestion = q;
+    currentVoteType = adminVoteType;
+    const existingByText = new Map(OPTIONS.map(o => [o.text, o]));
+    OPTIONS = options.map((text, i) =>
+      existingByText.get(text) || { id: `tmp_${i}`, text, voters: [] }
+    );
+    userVotes = new Set();
+    if (userName) {
+      OPTIONS.forEach(opt => {
+        if (opt.voters.some(v => v.name === userName)) userVotes.add(opt.id);
+      });
+    }
+    document.getElementById('poll-question').textContent = currentQuestion;
+    document.getElementById('vt-label').textContent =
+      currentVoteType === 'one' ? 'Select one' : 'Select multiple';
+    closeAdminPanel();
+    render();
+
+    // ── Background sync ────────────────────────────────────────
     try {
       const data = await apiPost('/api/admin/config', {
         question: q, voteType: adminVoteType, options,
       });
       applyPollData(data);
-      closeAdminPanel();
       render();
     } catch (err) {
       alert('Save failed: ' + err.message);
@@ -835,40 +866,4 @@
             </div>`).join('');
 
       return `
-        <div class="vp-section">
-          <div class="vp-section-header">
-            <span class="vp-section-label">${opt.text}</span>
-            <span class="vp-section-count">${opt.voters.length}</span>
-          </div>
-          ${rowsHtml}
-        </div>`;
-    }).join('');
-
-    document.getElementById('votes-body').innerHTML = `
-      <div class="votes-question-block">
-        <p class="votes-question">${currentQuestion}</p>
-        <p class="votes-summary">${total} member${total !== 1 ? 's' : ''} voted</p>
-      </div>
-      ${sectionsHtml}`;
-  }
-
-  function openVotesPanel() {
-    renderVotesPanel();
-    document.getElementById('votes-panel').classList.add('show');
-    document.body.style.overflow = 'hidden';
-  }
-
-  function closeVotesPanel() {
-    document.getElementById('votes-panel').classList.remove('show');
-    document.body.style.overflow = '';
-  }
-
-  document.getElementById('open-votes').addEventListener('click', openVotesPanel);
-  document.getElementById('close-votes').addEventListener('click', closeVotesPanel);
-
-  // ── Init ─────────────────────────────────────────────────────────
-  loadPoll().then(startRefresh);
-</script>
-
-</body>
-</html>
+        <div class
