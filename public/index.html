@@ -1,0 +1,841 @@
+<!DOCTYPE html>
+<html lang="en">
+<!--
+  Poll frontend — served by Express from public/index.html
+  All poll state comes from the API (/api/poll).
+  Only the voter's own name is stored in localStorage ('poll_name').
+  Opens as a plain HTML file in Chrome too — but without a server
+  the API calls will fail gracefully and the poll will show empty.
+-->
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Poll</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: #111b21;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      min-height: 100vh;
+      display: flex;
+      align-items: flex-start;
+      justify-content: center;
+      padding: 32px 16px;
+    }
+
+    /* ── Poll card ─────────────────────────────────────────── */
+    .card {
+      background: #1c1c1c;
+      border-radius: 16px;
+      padding: 20px 20px 0;
+      max-width: 420px;
+      width: 100%;
+    }
+
+    .question {
+      color: #e9edef;
+      font-size: 16px;
+      font-weight: 500;
+      line-height: 1.45;
+      margin-bottom: 10px;
+    }
+
+    .vote-type {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      margin-bottom: 22px;
+    }
+
+    .vt-icon {
+      width: 17px; height: 17px;
+      border-radius: 50%;
+      background: #8696a0;
+      flex-shrink: 0;
+      display: flex; align-items: center; justify-content: center;
+    }
+
+    .vt-label { color: #8696a0; font-size: 13px; }
+
+    /* ── Options ───────────────────────────────────────────── */
+    .option { cursor: pointer; user-select: none; -webkit-tap-highlight-color: transparent; }
+
+    .option-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      min-height: 32px;
+      margin-bottom: 5px;
+    }
+
+    .option-left { display: flex; align-items: center; gap: 13px; min-width: 0; }
+
+    .radio {
+      width: 22px; height: 22px;
+      border-radius: 50%;
+      border: 2px solid #8696a0;
+      flex-shrink: 0;
+      display: flex; align-items: center; justify-content: center;
+      transition: background 0.2s, border-color 0.2s;
+    }
+
+    .radio.selected { background: #25d366; border-color: #25d366; }
+    .option-label { color: #e9edef; font-size: 15px; }
+
+    .option-right {
+      display: flex; align-items: center;
+      gap: 9px; flex-shrink: 0; margin-left: 12px;
+    }
+
+    .badges { display: flex; align-items: center; }
+
+    .badge {
+      width: 28px; height: 28px;
+      border-radius: 50%;
+      border: 2px solid #1c1c1c;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 7.5px; color: #fff; font-weight: 700;
+      position: relative; flex-shrink: 0;
+      letter-spacing: -0.3px;
+    }
+
+    .count { font-size: 14px; font-weight: 500; min-width: 12px; text-align: right; }
+    .bar-track { background: #2a3942; border-radius: 4px; height: 8px; overflow: hidden; }
+    .bar-fill  { background: #25d366; height: 100%; border-radius: 4px; width: 0; }
+
+    /* ── Card footer (View votes row) ──────────────────────── */
+    .card-footer {
+      border-top: 1px solid #2a3942;
+      margin-top: 20px;
+      padding: 13px 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .view-votes-btn {
+      background: none; border: none;
+      color: #25d366; font-size: 14px; font-weight: 500;
+      font-family: inherit; cursor: pointer;
+    }
+
+    /* ── Admin button — own row, 2/3 the old size ──────────── */
+    .admin-row {
+      display: flex;
+      justify-content: flex-end;
+      padding: 0 0 10px;
+    }
+
+    .admin-btn {
+      background: none;
+      border: 1px solid #2a3942;
+      border-radius: 13px;
+      padding: 3px 8px;
+      display: flex; align-items: center; gap: 3px;
+      cursor: pointer; color: #8696a0;
+      font-size: 7.5px; font-family: inherit;
+    }
+
+    /* ── Name-entry modal ──────────────────────────────────── */
+    .overlay {
+      position: fixed; inset: 0;
+      background: rgba(0,0,0,0.65);
+      display: flex; align-items: center; justify-content: center;
+      padding: 20px; z-index: 100;
+      opacity: 0; pointer-events: none;
+      transition: opacity 0.2s;
+    }
+
+    .overlay.show { opacity: 1; pointer-events: all; }
+
+    .modal {
+      background: #1f2c33; border-radius: 14px; padding: 22px 24px;
+      width: 100%; max-width: 300px;
+      transform: scale(0.94);
+      transition: transform 0.22s cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+
+    .overlay.show .modal { transform: scale(1); }
+    .modal-title { color: #e9edef; font-size: 15px; font-weight: 500; margin-bottom: 14px; }
+
+    .modal input {
+      background: #2a3942; border: none; border-radius: 8px;
+      padding: 11px 14px; color: #e9edef; font-size: 14px;
+      font-family: inherit; width: 100%; margin-bottom: 18px; outline: none;
+    }
+
+    .modal input::placeholder { color: #8696a0; }
+    .modal-actions { display: flex; justify-content: flex-end; align-items: center; gap: 20px; }
+
+    .btn-cancel {
+      color: #8696a0; font-size: 14px; font-family: inherit;
+      background: none; border: none; cursor: pointer; padding: 0;
+    }
+
+    .btn-vote {
+      background: #25d366; border: none; border-radius: 20px;
+      color: #111; font-size: 14px; font-weight: 500; font-family: inherit;
+      padding: 8px 24px; cursor: pointer; transition: opacity 0.15s;
+    }
+
+    .btn-vote:disabled { opacity: 0.4; cursor: default; }
+
+    /* ── Admin panel ───────────────────────────────────────── */
+    .admin-overlay {
+      position: fixed; inset: 0;
+      background: rgba(0,0,0,0.72);
+      display: flex; align-items: flex-end; justify-content: center;
+      padding: 12px; z-index: 300;
+      opacity: 0; pointer-events: none;
+      transition: opacity 0.2s;
+    }
+
+    .admin-overlay.show { opacity: 1; pointer-events: all; }
+
+    .admin-panel {
+      background: #1f2c33;
+      border-radius: 16px;
+      border: 2px solid #e67e22;
+      width: 100%; max-width: 420px;
+      max-height: 88vh;
+      overflow-y: auto;
+      transform: translateY(40px);
+      transition: transform 0.28s cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+
+    .admin-overlay.show .admin-panel { transform: translateY(0); }
+
+    .admin-inner { padding: 20px 22px; }
+
+    .admin-header {
+      display: flex; justify-content: space-between; align-items: center;
+      margin-bottom: 22px;
+    }
+
+    .admin-title {
+      color: #e9edef; font-size: 15px; font-weight: 500;
+      display: flex; align-items: center; gap: 8px;
+    }
+
+    .admin-close {
+      background: none; border: none; color: #8696a0;
+      font-size: 20px; cursor: pointer; padding: 0; line-height: 1;
+    }
+
+    .admin-label {
+      color: #8696a0; font-size: 10px; letter-spacing: 0.08em;
+      margin-bottom: 8px; display: block;
+    }
+
+    .admin-textarea {
+      background: #2a3942; border: none; border-radius: 8px;
+      padding: 10px 14px; color: #e9edef; font-size: 13px;
+      font-family: inherit; width: 100%; resize: none; height: 72px;
+      outline: none; margin-bottom: 20px; line-height: 1.5;
+    }
+
+    .admin-textarea::placeholder { color: #8696a0; }
+
+    .type-toggle { display: flex; gap: 8px; margin-bottom: 20px; }
+
+    .toggle-btn {
+      background: #2a3942; border: none; border-radius: 20px;
+      padding: 7px 16px; font-size: 12px; color: #8696a0;
+      font-family: inherit; cursor: pointer;
+      transition: background 0.15s, color 0.15s;
+    }
+
+    .toggle-btn.active { background: #25d366; color: #111; font-weight: 500; }
+
+    .admin-opts-header {
+      display: flex; justify-content: space-between; align-items: center;
+      margin-bottom: 8px;
+    }
+
+    .clear-form-btn {
+      background: none; border: none;
+      color: #8696a0; font-size: 11px;
+      font-family: inherit; cursor: pointer; padding: 0;
+      transition: color 0.15s;
+    }
+
+    .clear-form-btn:hover { color: #ff6b6b; }
+
+    .admin-opt-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+
+    .admin-opt-input {
+      background: #2a3942; border: none; border-radius: 8px;
+      padding: 9px 12px; color: #e9edef; font-size: 13px;
+      font-family: inherit; flex: 1; outline: none;
+    }
+
+    .admin-opt-input::placeholder { color: #8696a0; }
+
+    .remove-opt-btn {
+      background: none; border: none; color: #8696a0;
+      font-size: 17px; cursor: pointer; padding: 0 3px;
+      flex-shrink: 0; line-height: 1;
+    }
+
+    .add-opt-btn {
+      background: none; border: 1px dashed #3b4a54; border-radius: 8px;
+      padding: 9px 12px; color: #8696a0; font-size: 13px;
+      font-family: inherit; width: 100%; text-align: left; cursor: pointer;
+      display: flex; align-items: center; gap: 6px;
+    }
+
+    .admin-divider { border-top: 1px solid #2a3942; margin: 18px 0 14px; }
+
+    .danger-btn {
+      background: #2a3942; border: none; border-radius: 8px;
+      color: #ff6b6b; font-size: 13px; font-family: inherit;
+      padding: 11px 0; width: 100%; cursor: pointer; margin-bottom: 10px;
+    }
+
+    .save-btn {
+      background: #25d366; border: none; border-radius: 24px;
+      color: #111; font-size: 14px; font-weight: 500; font-family: inherit;
+      padding: 11px 0; width: 100%; cursor: pointer;
+    }
+
+    /* ── Votes panel ───────────────────────────────────────── */
+    .votes-panel {
+      position: fixed; inset: 0; background: #111b21;
+      z-index: 200; display: flex; flex-direction: column;
+      transform: translateY(100%);
+      transition: transform 0.32s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    .votes-panel.show { transform: translateY(0); }
+
+    .votes-header {
+      display: flex; align-items: center; gap: 18px;
+      padding: 16px 20px 14px;
+      border-bottom: 1px solid #2a3942; flex-shrink: 0;
+    }
+
+    .back-btn {
+      background: none; border: none; color: #e9edef;
+      cursor: pointer; padding: 0; line-height: 1;
+      display: flex; align-items: center;
+    }
+
+    .votes-panel-title { color: #e9edef; font-size: 17px; font-weight: 500; }
+    .votes-body { overflow-y: auto; flex: 1; }
+
+    .votes-question-block { padding: 18px 20px 14px; border-bottom: 1px solid #2a3942; }
+    .votes-question { color: #e9edef; font-size: 16px; font-weight: 500; line-height: 1.4; margin-bottom: 4px; }
+    .votes-summary { color: #8696a0; font-size: 13px; }
+
+    .vp-section { border-bottom: 1px solid #2a3942; }
+
+    .vp-section-header {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 12px 20px 8px;
+    }
+
+    .vp-section-label { color: #e9edef; font-size: 15px; font-weight: 500; }
+    .vp-section-count { color: #8696a0; font-size: 15px; }
+
+    .voter-row { display: flex; align-items: center; gap: 10px; padding: 6px 20px; }
+
+    .voter-badge-sm {
+      width: 22px; height: 22px; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 6px; color: #fff; font-weight: 700;
+      flex-shrink: 0; letter-spacing: -0.3px;
+    }
+
+    .voter-info { flex: 1; min-width: 0; display: flex; align-items: baseline; gap: 7px; }
+    .voter-name { color: #e9edef; font-size: 14px; font-weight: 500; white-space: nowrap; }
+    .voter-time { color: #8696a0; font-size: 11px; white-space: nowrap; }
+    .vp-empty   { color: #8696a0; font-size: 14px; padding: 8px 20px 12px; }
+  </style>
+</head>
+<body>
+
+<!-- Poll card -->
+<div class="card">
+  <p class="question" id="poll-question">When can we meet?</p>
+  <div class="vote-type">
+    <div class="vt-icon">
+      <svg width="9" height="7" viewBox="0 0 9 7" fill="none">
+        <path d="M1.5 3.5L3.5 5.5L7.5 1.5" stroke="white" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    </div>
+    <span class="vt-label" id="vt-label">Select multiple</span>
+  </div>
+  <div id="options"></div>
+  <div class="card-footer">
+    <button class="view-votes-btn" id="open-votes">View votes</button>
+  </div>
+  <div class="admin-row">
+    <button class="admin-btn" id="open-admin" aria-label="Admin">
+      <svg width="7" height="9" viewBox="0 0 11 13" fill="none" aria-hidden="true">
+        <rect x="1" y="5" width="9" height="7.5" rx="1.5" stroke="#8696a0" stroke-width="1.4"/>
+        <path d="M3.5 5V3.5a2 2 0 0 1 4 0V5" stroke="#8696a0" stroke-width="1.4" stroke-linecap="round"/>
+      </svg>
+      Admin
+    </button>
+  </div>
+</div>
+
+<!-- Name-entry modal -->
+<div class="overlay" id="overlay">
+  <div class="modal">
+    <p class="modal-title">Enter your name</p>
+    <input type="text" id="name-input" placeholder="Your name..." maxlength="30" autocomplete="off">
+    <div class="modal-actions">
+      <button class="btn-cancel" id="btn-cancel">Cancel</button>
+      <button class="btn-vote" id="btn-vote" disabled>Vote</button>
+    </div>
+  </div>
+</div>
+
+<!-- Admin panel -->
+<div class="admin-overlay" id="admin-overlay">
+  <div class="admin-panel">
+    <div class="admin-inner">
+      <div class="admin-header">
+        <span class="admin-title">
+          <svg width="12" height="14" viewBox="0 0 12 14" fill="none" aria-hidden="true">
+            <rect x="1" y="5.5" width="10" height="8" rx="1.5" stroke="#e9edef" stroke-width="1.4"/>
+            <path d="M4 5.5V4a2 2 0 0 1 4 0v1.5" stroke="#e9edef" stroke-width="1.4" stroke-linecap="round"/>
+          </svg>
+          Admin
+        </span>
+        <button class="admin-close" id="close-admin">✕</button>
+      </div>
+      <label class="admin-label" for="admin-q">QUESTION</label>
+      <textarea id="admin-q" class="admin-textarea" placeholder="Type your question..."></textarea>
+      <span class="admin-label">VOTE TYPE</span>
+      <div class="type-toggle" id="type-toggle">
+        <button class="toggle-btn active" data-type="multiple">Select multiple</button>
+        <button class="toggle-btn" data-type="one">Select one</button>
+      </div>
+      <div class="admin-opts-header">
+        <span class="admin-label" style="margin-bottom:0">OPTIONS</span>
+        <button class="clear-form-btn" id="clear-form-btn">Clear all</button>
+      </div>
+      <div id="admin-opts-list"></div>
+      <button class="add-opt-btn" id="add-opt-btn">
+        <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden="true">
+          <path d="M6.5 1v11M1 6.5h11" stroke="#8696a0" stroke-width="1.5" stroke-linecap="round"/>
+        </svg>
+        Add option (up to 10)
+      </button>
+      <div class="admin-divider"></div>
+      <button class="danger-btn" id="clear-votes-btn">Clear votes &amp; data</button>
+      <button class="save-btn" id="save-admin-btn">Save &amp; close</button>
+    </div>
+  </div>
+</div>
+
+<!-- Votes panel -->
+<div class="votes-panel" id="votes-panel">
+  <div class="votes-header">
+    <button class="back-btn" id="close-votes" aria-label="Back">
+      <svg width="22" height="18" viewBox="0 0 22 18" fill="none">
+        <path d="M9 1L1 9L9 17M1 9H21" stroke="#e9edef" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    </button>
+    <span class="votes-panel-title">Poll votes</span>
+  </div>
+  <div class="votes-body" id="votes-body"></div>
+</div>
+
+<script>
+  // ── State ──────────────────────────────────────────────────────
+  // userName is the only thing stored locally — everything else lives on the server.
+  const DEFAULT_Q    = 'When can we meet?';
+  const DEFAULT_TYPE = 'multiple';
+
+  let currentQuestion = DEFAULT_Q;
+  let currentVoteType = DEFAULT_TYPE;
+  let OPTIONS         = [];      // populated from API
+  let userVotes       = new Set();
+  let userName        = localStorage.getItem('poll_name') || null;
+  let pendingVoteId   = null;
+  let refreshTimer    = null;
+
+  // ── Helpers ─────────────────────────────────────────────────────
+  const COLORS = [
+    '#5b7fa6','#8a6a9a','#4a8870','#c08050',
+    '#9a5a5a','#5a9a90','#8a4a6b','#6a5a8a',
+    '#4a7c9a','#8a7a4a','#6a8a4a','#a06060'
+  ];
+
+  function colorFor(name) {
+    let h = 0;
+    for (let i = 0; i < name.length; i++) h = name.charCodeAt(i) + ((h << 5) - h);
+    return COLORS[Math.abs(h) % COLORS.length];
+  }
+
+  function initials(name) {
+    return name.trim().slice(0, 3).toUpperCase();
+  }
+
+  function capitaliseName(str) {
+    return str ? str.charAt(0).toUpperCase() + str.slice(1) : str;
+  }
+
+  // ── API calls ────────────────────────────────────────────────────
+  async function apiGet(path) {
+    const r = await fetch(path);
+    if (!r.ok) throw new Error(`${r.status} ${r.statusText}`);
+    return r.json();
+  }
+
+  async function apiPost(path, body) {
+    const r = await fetch(path, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (!r.ok) {
+      const err = await r.json().catch(() => ({}));
+      throw new Error(err.error || `${r.status}`);
+    }
+    return r.json();
+  }
+
+  async function apiDelete(path) {
+    const r = await fetch(path, { method: 'DELETE' });
+    if (!r.ok) throw new Error(`${r.status} ${r.statusText}`);
+    return r.json();
+  }
+
+  // ── Apply poll data from server ──────────────────────────────────
+  // Called after every API response — single source of truth for all state.
+  function applyPollData(data) {
+    currentQuestion = data.question  || DEFAULT_Q;
+    currentVoteType = data.voteType  || DEFAULT_TYPE;
+    OPTIONS         = data.options   || [];
+
+    document.getElementById('poll-question').textContent = currentQuestion;
+    document.getElementById('vt-label').textContent =
+      currentVoteType === 'one' ? 'Select one' : 'Select multiple';
+
+    // Derive which options this browser's user has voted for
+    userVotes = new Set();
+    if (userName) {
+      OPTIONS.forEach(opt => {
+        if (opt.voters.some(v => v.name === userName)) userVotes.add(opt.id);
+      });
+    }
+  }
+
+  // ── Load poll from server ────────────────────────────────────────
+  async function loadPoll() {
+    try {
+      const data = await apiGet('/api/poll');
+      applyPollData(data);
+      render();
+    } catch (err) {
+      console.warn('Could not load poll:', err.message);
+      // Graceful degradation: show empty poll (still usable via admin)
+      render();
+    }
+  }
+
+  // Auto-refresh every 5 s so all clients see new votes in near-real-time.
+  function startRefresh() {
+    stopRefresh();
+    refreshTimer = setInterval(async () => {
+      try {
+        const data = await apiGet('/api/poll');
+        applyPollData(data);
+        render();
+        // Keep votes panel in sync if it's open
+        if (document.getElementById('votes-panel').classList.contains('show')) {
+          renderVotesPanel();
+        }
+      } catch { /* silent — don't disturb the user on a transient failure */ }
+    }, 5000);
+  }
+
+  function stopRefresh() {
+    if (refreshTimer) { clearInterval(refreshTimer); refreshTimer = null; }
+  }
+
+  // ── Render poll ──────────────────────────────────────────────────
+  function render() {
+    const container = document.getElementById('options');
+    const max       = OPTIONS.length ? Math.max(...OPTIONS.map(o => o.voters.length), 1) : 1;
+
+    const oldWidths = Array.from(container.querySelectorAll('.bar-fill'))
+      .map(el => parseFloat(el.style.width) || 0);
+
+    container.innerHTML = OPTIONS.map((opt, i) => {
+      const count    = opt.voters.length;
+      const pct      = (count / max) * 100;
+      const selected = userVotes.has(opt.id);
+      const isLast   = i === OPTIONS.length - 1;
+
+      const radioInner = selected
+        ? `<svg width="10" height="8" viewBox="0 0 10 8" fill="none">
+             <path d="M1 3.5L4 6.5L9 1" stroke="#111" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+           </svg>`
+        : '';
+
+      const shown      = opt.voters.slice(-5);
+      const badgesHtml = shown.map((v, bi) =>
+        `<div class="badge" style="background:${colorFor(v.name)};${bi > 0 ? 'margin-left:-9px;' : ''}z-index:${shown.length - bi}">${initials(v.name)}</div>`
+      ).join('');
+
+      return `
+        <div class="option" style="margin-bottom:${isLast ? '0' : '26px'}" data-id="${opt.id}">
+          <div class="option-row">
+            <div class="option-left">
+              <div class="radio ${selected ? 'selected' : ''}">${radioInner}</div>
+              <span class="option-label">${opt.text}</span>
+            </div>
+            <div class="option-right">
+              ${count > 0 ? `<div class="badges">${badgesHtml}</div>` : ''}
+              <span class="count" style="color:${count > 0 ? '#e9edef' : '#8696a0'}">${count}</span>
+            </div>
+          </div>
+          <div class="bar-track"><div class="bar-fill" data-pct="${pct}"></div></div>
+        </div>`;
+    }).join('');
+
+    const bars = Array.from(container.querySelectorAll('.bar-fill'));
+    bars.forEach((bar, i) => {
+      bar.style.transition = 'none';
+      bar.style.width      = (oldWidths[i] ?? 0) + '%';
+    });
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      bars.forEach(bar => {
+        bar.style.transition = 'width 0.45s cubic-bezier(0.4, 0, 0.2, 1)';
+        bar.style.width      = bar.dataset.pct + '%';
+      });
+    }));
+
+    container.querySelectorAll('.option').forEach(el =>
+      el.addEventListener('click', () => handleVote(el.dataset.id))
+    );
+  }
+
+  // ── Vote logic ───────────────────────────────────────────────────
+  function handleVote(optId) {
+    if (currentVoteType === 'one' && userVotes.has(optId)) return;
+    pendingVoteId = optId;
+    userName ? commitVote(userName, optId) : openModal();
+  }
+
+  async function commitVote(name, optId) {
+    try {
+      const data = await apiPost('/api/vote', { voterName: name, optionId: optId });
+      localStorage.setItem('poll_name', name);
+      applyPollData(data);
+      render();
+    } catch (err) {
+      console.error('Vote failed:', err.message);
+    }
+  }
+
+  // ── Name modal ───────────────────────────────────────────────────
+  const nameInput = document.getElementById('name-input');
+  const btnVote   = document.getElementById('btn-vote');
+
+  function openModal() {
+    document.getElementById('overlay').classList.add('show');
+    setTimeout(() => nameInput.focus(), 150);
+  }
+
+  function closeModal() {
+    document.getElementById('overlay').classList.remove('show');
+    nameInput.value  = '';
+    btnVote.disabled = true;
+    pendingVoteId    = null;
+  }
+
+  nameInput.addEventListener('input', e => {
+    if (e.target.value.length > 0) e.target.value = capitaliseName(e.target.value);
+    btnVote.disabled = !e.target.value.trim();
+  });
+
+  btnVote.addEventListener('click', () => {
+    const name = nameInput.value.trim();
+    if (!name) return;
+    userName = capitaliseName(name);
+    const voteTarget = pendingVoteId;   // capture before closeModal() nulls it
+    closeModal();
+    commitVote(userName, voteTarget);
+  });
+
+  nameInput.addEventListener('keydown', e => { if (e.key === 'Enter') btnVote.click(); });
+  document.getElementById('btn-cancel').addEventListener('click', closeModal);
+  document.getElementById('overlay').addEventListener('click', e => {
+    if (e.target === e.currentTarget) closeModal();
+  });
+
+  // ── Admin panel ──────────────────────────────────────────────────
+  let adminVoteType   = DEFAULT_TYPE;
+  const adminOptsList = document.getElementById('admin-opts-list');
+  const addOptBtn     = document.getElementById('add-opt-btn');
+  const typeToggle    = document.getElementById('type-toggle');
+
+  function setAdminVoteType(type) {
+    adminVoteType = type;
+    typeToggle.querySelectorAll('.toggle-btn').forEach(btn =>
+      btn.classList.toggle('active', btn.dataset.type === type)
+    );
+  }
+
+  function addAdminOptionRow(value = '') {
+    const count = adminOptsList.querySelectorAll('.admin-opt-row').length;
+    if (count >= 10) return;
+    const div = document.createElement('div');
+    div.className = 'admin-opt-row';
+    div.innerHTML = `
+      <input type="text" class="admin-opt-input" placeholder="Option ${count + 1}..." maxlength="60">
+      <button class="remove-opt-btn" type="button" aria-label="Remove">✕</button>`;
+    div.querySelector('.admin-opt-input').value = value;   // value via property — XSS-safe
+    div.querySelector('.remove-opt-btn').addEventListener('click', () => {
+      div.remove();
+      renumberPlaceholders();
+      updateAddOptVisibility();
+    });
+    adminOptsList.appendChild(div);
+    updateAddOptVisibility();
+  }
+
+  function renumberPlaceholders() {
+    adminOptsList.querySelectorAll('.admin-opt-input').forEach((el, i) => {
+      el.placeholder = `Option ${i + 1}...`;
+    });
+  }
+
+  function updateAddOptVisibility() {
+    addOptBtn.style.display =
+      adminOptsList.querySelectorAll('.admin-opt-row').length >= 10 ? 'none' : '';
+  }
+
+  function openAdminPanel() {
+    // Pre-fill with current live poll state
+    document.getElementById('admin-q').value = currentQuestion;
+    setAdminVoteType(currentVoteType);
+    adminOptsList.innerHTML = '';
+    if (OPTIONS.length > 0) {
+      OPTIONS.forEach(o => addAdminOptionRow(o.text));
+    } else {
+      addAdminOptionRow(); addAdminOptionRow();
+    }
+    document.getElementById('admin-overlay').classList.add('show');
+    document.body.style.overflow = 'hidden';
+  }
+
+  function closeAdminPanel() {
+    document.getElementById('admin-overlay').classList.remove('show');
+    document.body.style.overflow = '';
+  }
+
+  function clearAdminForm() {
+    document.getElementById('admin-q').value = '';
+    setAdminVoteType(DEFAULT_TYPE);
+    adminOptsList.innerHTML = '';
+    addAdminOptionRow(); addAdminOptionRow();
+    updateAddOptVisibility();
+  }
+
+  typeToggle.querySelectorAll('.toggle-btn').forEach(btn =>
+    btn.addEventListener('click', () => setAdminVoteType(btn.dataset.type))
+  );
+  addOptBtn.addEventListener('click', () => addAdminOptionRow());
+  document.getElementById('clear-form-btn').addEventListener('click', clearAdminForm);
+
+  document.getElementById('save-admin-btn').addEventListener('click', async () => {
+    const q = document.getElementById('admin-q').value.trim();
+    if (!q) { alert('Please enter a question.'); return; }
+
+    const options = Array.from(adminOptsList.querySelectorAll('.admin-opt-input'))
+      .map(el => el.value.trim()).filter(Boolean);
+    if (options.length === 0) { alert('Please add at least one option.'); return; }
+
+    try {
+      const data = await apiPost('/api/admin/config', {
+        question: q, voteType: adminVoteType, options,
+      });
+      applyPollData(data);
+      closeAdminPanel();
+      render();
+    } catch (err) {
+      alert('Save failed: ' + err.message);
+    }
+  });
+
+  document.getElementById('clear-votes-btn').addEventListener('click', async () => {
+    if (!confirm('Clear all votes and data? This cannot be undone.')) return;
+    try {
+      const data = await apiDelete('/api/admin/votes');
+      applyPollData(data);
+      closeAdminPanel();
+      render();
+    } catch (err) {
+      alert('Clear failed: ' + err.message);
+    }
+  });
+
+  document.getElementById('close-admin').addEventListener('click', closeAdminPanel);
+  document.getElementById('admin-overlay').addEventListener('click', e => {
+    if (e.target === e.currentTarget) closeAdminPanel();
+  });
+  document.getElementById('open-admin').addEventListener('click', openAdminPanel);
+
+  // ── Votes panel ──────────────────────────────────────────────────
+  function renderVotesPanel() {
+    const uniqueVoters = new Set(OPTIONS.flatMap(o => o.voters.map(v => v.name)));
+    const total        = uniqueVoters.size;
+
+    const sectionsHtml = OPTIONS.map(opt => {
+      const rowsHtml = opt.voters.length === 0
+        ? `<p class="vp-empty">No votes yet</p>`
+        : opt.voters.map(v => `
+            <div class="voter-row">
+              <div class="voter-badge-sm" style="background:${colorFor(v.name)}">${initials(v.name)}</div>
+              <div class="voter-info">
+                <span class="voter-name">${v.name}</span>
+                ${v.ts ? `<span class="voter-time">${v.ts}</span>` : ''}
+              </div>
+            </div>`).join('');
+
+      return `
+        <div class="vp-section">
+          <div class="vp-section-header">
+            <span class="vp-section-label">${opt.text}</span>
+            <span class="vp-section-count">${opt.voters.length}</span>
+          </div>
+          ${rowsHtml}
+        </div>`;
+    }).join('');
+
+    document.getElementById('votes-body').innerHTML = `
+      <div class="votes-question-block">
+        <p class="votes-question">${currentQuestion}</p>
+        <p class="votes-summary">${total} member${total !== 1 ? 's' : ''} voted</p>
+      </div>
+      ${sectionsHtml}`;
+  }
+
+  function openVotesPanel() {
+    renderVotesPanel();
+    document.getElementById('votes-panel').classList.add('show');
+    document.body.style.overflow = 'hidden';
+  }
+
+  function closeVotesPanel() {
+    document.getElementById('votes-panel').classList.remove('show');
+    document.body.style.overflow = '';
+  }
+
+  document.getElementById('open-votes').addEventListener('click', openVotesPanel);
+  document.getElementById('close-votes').addEventListener('click', closeVotesPanel);
+
+  // ── Init ─────────────────────────────────────────────────────────
+  loadPoll().then(startRefresh);
+</script>
+
+</body>
+</html>

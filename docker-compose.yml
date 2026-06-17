@@ -1,0 +1,14 @@
+services:
+  poll:
+    build: .
+    ports:
+      - "3000:3000"
+    volumes:
+      - poll-data:/data      # SQLite file lives here — persists across restarts
+    environment:
+      - PORT=3000
+      - DATA_DIR=/data
+    restart: unless-stopped
+
+volumes:
+  poll-data:
