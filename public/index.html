@@ -625,13 +625,46 @@
   }
 
   async function commitVote(name, optId) {
+    // ── Snapshot for rollback ──────────────────────────────────
+    const prevUserVotes = new Set(userVotes);
+    const prevVoters    = OPTIONS.map(o => ({ id: o.id, voters: o.voters.map(v => ({ ...v })) }));
+    const wasVoted      = userVotes.has(optId);
+
+    // ── Optimistic update — render instantly before network ───
+    if (currentVoteType === 'one') {
+      OPTIONS.forEach(o => { o.voters = o.voters.filter(v => v.name !== name); });
+      userVotes.clear();
+      const opt = OPTIONS.find(o => o.id === optId);
+      if (opt) { userVotes.add(optId); opt.voters.push({ name, ts: '' }); }
+    } else {
+      const opt = OPTIONS.find(o => o.id === optId);
+      if (opt) {
+        if (wasVoted) {
+          userVotes.delete(optId);
+          opt.voters = opt.voters.filter(v => v.name !== name);
+        } else {
+          userVotes.add(optId);
+          if (!opt.voters.some(v => v.name === name)) opt.voters.push({ name, ts: '' });
+        }
+      }
+    }
+
+    localStorage.setItem('poll_name', name);
+    render(); // instant — user sees the change before the network round-trip
+
+    // ── Background sync — reconcile with server ───────────────
     try {
       const data = await apiPost('/api/vote', { voterName: name, optionId: optId });
-      localStorage.setItem('poll_name', name);
-      applyPollData(data);
+      applyPollData(data); // fills in real timestamps + any concurrent votes
       render();
     } catch (err) {
-      console.error('Vote failed:', err.message);
+      console.error('Vote failed — rolling back:', err.message);
+      userVotes = prevUserVotes;
+      prevVoters.forEach(sv => {
+        const o = OPTIONS.find(o => o.id === sv.id);
+        if (o) o.voters = sv.voters;
+      });
+      render();
     }
   }
 

@@ -54,12 +54,14 @@ const stmts = {
   findVote:    db.prepare('SELECT id FROM votes WHERE voter_name = ? AND option_id = ?'),
   deleteVote:  db.prepare('DELETE FROM votes WHERE id = ?'),
   insertVote:  db.prepare('INSERT INTO votes (voter_name, option_id, voted_at) VALUES (?, ?, ?)'),
-  clearUser:   db.prepare('DELETE FROM votes WHERE voter_name = ?'),
-  clearVotes:  db.prepare('DELETE FROM votes'),
-  clearOpts:   db.prepare('DELETE FROM options'),
-  updateCfg:   db.prepare('UPDATE config SET question = ?, vote_type = ? WHERE id = 1'),
-  insertOpt:   db.prepare('INSERT INTO options (text, position) VALUES (?, ?)'),
-  resetConfig: db.prepare(
+  clearUser:    db.prepare('DELETE FROM votes WHERE voter_name = ?'),
+  clearVotes:   db.prepare('DELETE FROM votes'),
+  clearOpts:    db.prepare('DELETE FROM options'),
+  updateCfg:    db.prepare('UPDATE config SET question = ?, vote_type = ? WHERE id = 1'),
+  insertOpt:    db.prepare('INSERT INTO options (text, position) VALUES (?, ?)'),
+  deleteOpt:    db.prepare('DELETE FROM options WHERE id = ?'),
+  updateOptPos: db.prepare('UPDATE options SET position = ? WHERE id = ?'),
+  resetConfig:  db.prepare(
     "UPDATE config SET question = 'When can we meet?', vote_type = 'multiple' WHERE id = 1"
   ),
 };
@@ -83,15 +85,33 @@ function getPoll() {
 }
 
 /**
- * Replaces the poll question, vote type, and all options.
- * All existing votes are cleared (option IDs change).
+ * Updates the poll question, vote type, and options.
+ * Options are matched by text — existing options keep their votes.
+ * Options removed from the list are deleted (CASCADE removes their votes).
+ * New options are inserted. Renaming = remove + add (votes lost, by design).
  */
 function setConfig(question, voteType, optionTexts) {
   db.transaction(() => {
     stmts.updateCfg.run(question, voteType);
-    stmts.clearVotes.run();
-    stmts.clearOpts.run();
-    optionTexts.forEach((text, i) => stmts.insertOpt.run(text, i));
+
+    const existing       = stmts.getOptions.all();
+    const existingByText = new Map(existing.map(o => [o.text, o]));
+    const newTextSet     = new Set(optionTexts);
+
+    // Delete options that are no longer in the list (CASCADE deletes their votes)
+    existing
+      .filter(o => !newTextSet.has(o.text))
+      .forEach(o => stmts.deleteOpt.run(o.id));
+
+    // Insert new options; update position of kept options
+    optionTexts.forEach((text, i) => {
+      const ex = existingByText.get(text);
+      if (ex) {
+        stmts.updateOptPos.run(i, ex.id);
+      } else {
+        stmts.insertOpt.run(text, i);
+      }
+    });
   })();
 }
 
