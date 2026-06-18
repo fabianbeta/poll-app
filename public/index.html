@@ -1,11 +1,13 @@
 <!DOCTYPE html>
 <html lang="en">
 <!--
-  Poll frontend — served by Express from public/index.html
-  All poll state comes from the API (/api/poll).
-  Only the voter's own name is stored in localStorage ('poll_name').
-  Opens as a plain HTML file in Chrome too — but without a server
-  the API calls will fail gracefully and the poll will show empty.
+  Poll — self-contained frontend
+  Serve as: public/index.html  (Express / Docker)
+  Also opens directly in Chrome as a local file (localStorage mode)
+
+  To inject a poll ID from the server:
+    <script>window.POLL_ID = 'room_xyz';<\/script>  (before this file loads)
+  All fetch() calls use relative paths (/api/...) — no hardcoded localhost.
 -->
 <head>
   <meta charset="UTF-8">
@@ -24,7 +26,7 @@
       padding: 32px 16px;
     }
 
-    /* ── Poll card ─────────────────────────────────────────── */
+    /* ── Poll card — transparent, no box ──────────────────────── */
     .card {
       background: transparent;
       padding: 20px 20px 0;
@@ -57,7 +59,7 @@
 
     .vt-label { color: #8696a0; font-size: 13px; }
 
-    /* ── Options ───────────────────────────────────────────── */
+    /* ── Options ───────────────────────────────────────────────── */
     .option { user-select: none; -webkit-tap-highlight-color: transparent; }
 
     .option-row {
@@ -88,6 +90,7 @@
       gap: 9px; flex-shrink: 0; margin-left: 12px;
     }
 
+    /* Badges open the votes panel on click */
     .badges { display: flex; align-items: center; cursor: pointer; }
 
     .badge {
@@ -104,7 +107,7 @@
     .bar-track { background: #2a3942; border-radius: 4px; height: 8px; overflow: hidden; }
     .bar-fill  { background: #25d366; height: 100%; border-radius: 4px; width: 0; }
 
-    /* ── Card footer (View votes row) ──────────────────────── */
+    /* ── Card footer (View votes row) ─────────────────────────── */
     .card-footer {
       border-top: 1px solid #2a3942;
       margin-top: 20px;
@@ -120,24 +123,41 @@
       font-family: inherit; cursor: pointer;
     }
 
-    /* ── Admin button — own row, 2/3 the old size ──────────── */
+    /* ── Bottom action row — both buttons, pushed 300px down ──── */
     .admin-row {
       display: flex;
-      justify-content: flex-end;
+      justify-content: space-between;
+      align-items: center;
       padding: 0 0 10px;
+      margin-top: 300px;
     }
 
+    /* Edit name button — ~2× the admin button */
+    .edit-name-btn {
+      background: none;
+      border: 1px solid #3a4e5a;
+      border-radius: 20px;
+      padding: 6px 16px;
+      display: flex; align-items: center; gap: 6px;
+      cursor: pointer; color: #8696a0;
+      font-size: 15px; font-family: inherit;
+      transition: border-color 0.15s, color 0.15s;
+    }
+
+    .edit-name-btn:hover { border-color: #25d366; color: #25d366; }
+
+    /* Admin button — dark red, clearly not for clicking */
     .admin-btn {
       background: none;
-      border: 1px solid #2a3942;
+      border: 1px solid #5a1a1a;
       border-radius: 13px;
       padding: 3px 8px;
       display: flex; align-items: center; gap: 3px;
-      cursor: pointer; color: #8696a0;
+      cursor: pointer; color: #5a1a1a;
       font-size: 7.5px; font-family: inherit;
     }
 
-    /* ── Name-entry modal ──────────────────────────────────── */
+    /* ── Name-entry modal ─────────────────────────────────────── */
     .overlay {
       position: fixed; inset: 0;
       background: rgba(0,0,0,0.65);
@@ -181,7 +201,7 @@
 
     .btn-vote:disabled { opacity: 0.4; cursor: default; }
 
-    /* ── Admin panel ───────────────────────────────────────── */
+    /* ── Admin panel ──────────────────────────────────────────── */
     .admin-overlay {
       position: fixed; inset: 0;
       background: rgba(0,0,0,0.72);
@@ -262,7 +282,9 @@
 
     .clear-form-btn:hover { color: #ff6b6b; }
 
-    .admin-opt-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+    .admin-opt-row {
+      display: flex; align-items: center; gap: 8px; margin-bottom: 8px;
+    }
 
     .admin-opt-input {
       background: #2a3942; border: none; border-radius: 8px;
@@ -299,7 +321,7 @@
       padding: 11px 0; width: 100%; cursor: pointer;
     }
 
-    /* ── Votes panel ───────────────────────────────────────── */
+    /* ── Votes panel ──────────────────────────────────────────── */
     .votes-panel {
       position: fixed; inset: 0; background: #111b21;
       z-index: 200; display: flex; flex-direction: column;
@@ -358,6 +380,7 @@
 <!-- Poll card -->
 <div class="card">
   <p class="question" id="poll-question">When can we meet?</p>
+
   <div class="vote-type">
     <div class="vt-icon">
       <svg width="9" height="7" viewBox="0 0 9 7" fill="none">
@@ -366,15 +389,25 @@
     </div>
     <span class="vt-label" id="vt-label">Select multiple</span>
   </div>
+
   <div id="options"></div>
+
   <div class="card-footer">
     <button class="view-votes-btn" id="open-votes">View votes</button>
   </div>
+
+  <!-- Edit name + Admin row — 300px below the footer -->
   <div class="admin-row">
+    <button class="edit-name-btn" id="open-edit-name" aria-label="Edit name">
+      <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden="true">
+        <path d="M9.5 1.5a1.414 1.414 0 0 1 2 2L4 11H1.5V8.5L9.5 1.5Z" stroke="#8696a0" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      Edit name
+    </button>
     <button class="admin-btn" id="open-admin" aria-label="Admin">
       <svg width="7" height="9" viewBox="0 0 11 13" fill="none" aria-hidden="true">
-        <rect x="1" y="5" width="9" height="7.5" rx="1.5" stroke="#8696a0" stroke-width="1.4"/>
-        <path d="M3.5 5V3.5a2 2 0 0 1 4 0V5" stroke="#8696a0" stroke-width="1.4" stroke-linecap="round"/>
+        <rect x="1" y="5" width="9" height="7.5" rx="1.5" stroke="#5a1a1a" stroke-width="1.4"/>
+        <path d="M3.5 5V3.5a2 2 0 0 1 4 0V5" stroke="#5a1a1a" stroke-width="1.4" stroke-linecap="round"/>
       </svg>
       Admin
     </button>
@@ -393,10 +426,23 @@
   </div>
 </div>
 
+<!-- Edit name modal -->
+<div class="overlay" id="edit-name-overlay">
+  <div class="modal">
+    <p class="modal-title" id="edit-name-title">Edit your name</p>
+    <input type="text" id="edit-name-input" placeholder="Your name..." maxlength="30" autocomplete="off">
+    <div class="modal-actions">
+      <button class="btn-cancel" id="edit-name-cancel">Cancel</button>
+      <button class="btn-vote" id="edit-name-save">Save</button>
+    </div>
+  </div>
+</div>
+
 <!-- Admin panel -->
 <div class="admin-overlay" id="admin-overlay">
   <div class="admin-panel">
     <div class="admin-inner">
+
       <div class="admin-header">
         <span class="admin-title">
           <svg width="12" height="14" viewBox="0 0 12 14" fill="none" aria-hidden="true">
@@ -407,13 +453,16 @@
         </span>
         <button class="admin-close" id="close-admin">✕</button>
       </div>
+
       <label class="admin-label" for="admin-q">QUESTION</label>
       <textarea id="admin-q" class="admin-textarea" placeholder="Type your question..."></textarea>
+
       <span class="admin-label">VOTE TYPE</span>
       <div class="type-toggle" id="type-toggle">
         <button class="toggle-btn active" data-type="multiple">Select multiple</button>
         <button class="toggle-btn" data-type="one">Select one</button>
       </div>
+
       <div class="admin-opts-header">
         <span class="admin-label" style="margin-bottom:0">OPTIONS</span>
         <button class="clear-form-btn" id="clear-form-btn">Clear all</button>
@@ -425,9 +474,11 @@
         </svg>
         Add option (up to 10)
       </button>
+
       <div class="admin-divider"></div>
-      <button class="danger-btn" id="clear-votes-btn">Clear votes &amp; data</button>
+      <button class="danger-btn" id="clear-votes-btn">Clear votes &amp; cookies</button>
       <button class="save-btn" id="save-admin-btn">Save &amp; close</button>
+
     </div>
   </div>
 </div>
@@ -446,20 +497,70 @@
 </div>
 
 <script>
-  // ── State ──────────────────────────────────────────────────────
-  // userName is the only thing stored locally — everything else lives on the server.
+  // ── Config ──────────────────────────────────────────────────────
+  const POLL_ID      = window.POLL_ID || 'poll_09';
   const DEFAULT_Q    = 'When can we meet?';
   const DEFAULT_TYPE = 'multiple';
 
+  const KEYS = {
+    name:       POLL_ID + '_name',
+    votes:      POLL_ID + '_votes',
+    timestamps: POLL_ID + '_timestamps',
+    config:     POLL_ID + '_config',
+  };
+
+  // ── State ────────────────────────────────────────────────────────
   let currentQuestion = DEFAULT_Q;
   let currentVoteType = DEFAULT_TYPE;
-  let OPTIONS         = [];      // populated from API
-  let userVotes       = new Set();
-  let userName        = localStorage.getItem('poll_name') || null;
-  let pendingVoteId   = null;
-  let refreshTimer    = null;
+  const OPTIONS       = [];
 
-  // ── Helpers ─────────────────────────────────────────────────────
+  let userName      = localStorage.getItem(KEYS.name) || null;
+  let userVotes     = new Set();
+  let savedTs       = {};
+  let pendingVoteId = null;
+
+  // ── Animation gate — prevents mid-animation re-renders ──────────
+  const ANIM_MS   = 450;
+  let _animating  = false;
+  let _needRender = false;
+
+  // ── Bootstrap: restore saved config then votes ──────────────────
+  function restoreConfig() {
+    const raw = localStorage.getItem(KEYS.config);
+    if (!raw) return;
+    let cfg;
+    try { cfg = JSON.parse(raw); } catch { return; }
+    currentQuestion = cfg.question  || DEFAULT_Q;
+    currentVoteType = cfg.voteType  || DEFAULT_TYPE;
+    (cfg.options || []).forEach((text, i) =>
+      OPTIONS.push({ id: 'opt_' + i, text, voters: [] })
+    );
+    document.getElementById('poll-question').textContent = currentQuestion;
+    document.getElementById('vt-label').textContent =
+      currentVoteType === 'one' ? 'Select one' : 'Select multiple';
+  }
+
+  function restoreVotes() {
+    try {
+      const rawV = localStorage.getItem(KEYS.votes);
+      const rawT = localStorage.getItem(KEYS.timestamps);
+      userVotes = new Set(rawV ? JSON.parse(rawV) : []);
+      savedTs   = rawT ? JSON.parse(rawT) : {};
+    } catch { userVotes = new Set(); savedTs = {}; }
+
+    if (!userName || userVotes.size === 0) return;
+    userVotes.forEach(optId => {
+      const opt = OPTIONS.find(o => o.id === optId);
+      if (opt && !opt.voters.some(v => v.name === userName)) {
+        opt.voters.push({ name: userName, ts: savedTs[optId] || '' });
+      }
+    });
+  }
+
+  restoreConfig();
+  restoreVotes();
+
+  // ── Helpers ──────────────────────────────────────────────────────
   const COLORS = [
     '#5b7fa6','#8a6a9a','#4a8870','#c08050',
     '#9a5a5a','#5a9a90','#8a4a6b','#6a5a8a',
@@ -472,98 +573,36 @@
     return COLORS[Math.abs(h) % COLORS.length];
   }
 
-  function initials(name) {
-    return name.trim().slice(0, 3).toUpperCase();
-  }
+  function initials(name) { return name.trim().slice(0, 3).toUpperCase(); }
 
   function capitaliseName(str) {
     return str ? str.charAt(0).toUpperCase() + str.slice(1) : str;
   }
 
-  // ── API calls ────────────────────────────────────────────────────
-  async function apiGet(path) {
-    const r = await fetch(path);
-    if (!r.ok) throw new Error(`${r.status} ${r.statusText}`);
-    return r.json();
-  }
-
-  async function apiPost(path, body) {
-    const r = await fetch(path, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    });
-    if (!r.ok) {
-      const err = await r.json().catch(() => ({}));
-      throw new Error(err.error || `${r.status}`);
-    }
-    return r.json();
-  }
-
-  async function apiDelete(path) {
-    const r = await fetch(path, { method: 'DELETE' });
-    if (!r.ok) throw new Error(`${r.status} ${r.statusText}`);
-    return r.json();
-  }
-
-  // ── Apply poll data from server ──────────────────────────────────
-  // Called after every API response — single source of truth for all state.
-  function applyPollData(data) {
-    currentQuestion = data.question  || DEFAULT_Q;
-    currentVoteType = data.voteType  || DEFAULT_TYPE;
-    OPTIONS         = data.options   || [];
-
-    document.getElementById('poll-question').textContent = currentQuestion;
-    document.getElementById('vt-label').textContent =
-      currentVoteType === 'one' ? 'Select one' : 'Select multiple';
-
-    // Derive which options this browser's user has voted for
-    userVotes = new Set();
-    if (userName) {
-      OPTIONS.forEach(opt => {
-        if (opt.voters.some(v => v.name === userName)) userVotes.add(opt.id);
-      });
-    }
-  }
-
-  // ── Load poll from server ────────────────────────────────────────
-  async function loadPoll() {
-    try {
-      const data = await apiGet('/api/poll');
-      applyPollData(data);
-      render();
-    } catch (err) {
-      console.warn('Could not load poll:', err.message);
-      // Graceful degradation: show empty poll (still usable via admin)
-      render();
-    }
-  }
-
-  // Auto-refresh every 5 s so all clients see new votes in near-real-time.
-  function startRefresh() {
-    stopRefresh();
-    refreshTimer = setInterval(async () => {
-      try {
-        const data = await apiGet('/api/poll');
-        applyPollData(data);
-        render();
-        // Keep votes panel in sync if it's open
-        if (document.getElementById('votes-panel').classList.contains('show')) {
-          renderVotesPanel();
-        }
-      } catch { /* silent — don't disturb the user on a transient failure */ }
-    }, 5000);
-  }
-
-  function stopRefresh() {
-    if (refreshTimer) { clearInterval(refreshTimer); refreshTimer = null; }
+  function formatTs() {
+    const d  = new Date();
+    const mo = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    return `${d.getDate()} ${mo[d.getMonth()]}, ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
   }
 
   // ── Render poll ──────────────────────────────────────────────────
+  // Public entry point — defers if an animation is already running
   function render() {
+    if (_animating) {
+      _needRender = true;   // state changed; re-render once current anim finishes
+      return;
+    }
+    _doRender();
+  }
+
+  function _doRender() {
+    _animating  = true;
+    _needRender = false;
+
     const container = document.getElementById('options');
     const max       = OPTIONS.length ? Math.max(...OPTIONS.map(o => o.voters.length), 1) : 1;
 
+    // Snapshot current bar widths BEFORE rebuilding the DOM
     const oldWidths = Array.from(container.querySelectorAll('.bar-fill'))
       .map(el => parseFloat(el.style.width) || 0);
 
@@ -600,25 +639,35 @@
         </div>`;
     }).join('');
 
+    // Set bars to their previous positions instantly, then animate to new positions
     const bars = Array.from(container.querySelectorAll('.bar-fill'));
     bars.forEach((bar, i) => {
       bar.style.transition = 'none';
       bar.style.width      = (oldWidths[i] ?? 0) + '%';
     });
+
     requestAnimationFrame(() => requestAnimationFrame(() => {
       bars.forEach(bar => {
-        bar.style.transition = 'width 0.45s cubic-bezier(0.4, 0, 0.2, 1)';
+        bar.style.transition = `width ${ANIM_MS}ms cubic-bezier(0.4, 0, 0.2, 1)`;
         bar.style.width      = bar.dataset.pct + '%';
       });
+
+      // Release the gate after animation completes; run queued render if needed
+      setTimeout(() => {
+        _animating = false;
+        if (_needRender) {
+          _needRender = false;
+          _doRender();
+        }
+      }, ANIM_MS + 20); // small buffer past animation end
     }));
 
+    // Re-attach event listeners (synchronous — runs immediately after innerHTML)
     container.querySelectorAll('.option').forEach(el => {
-      // Only the checkbox/radio triggers a vote
       el.querySelector('.radio').addEventListener('click', e => {
         e.stopPropagation();
         handleVote(el.dataset.id);
       });
-      // Tapping voter badge cluster opens the votes panel
       const badgesEl = el.querySelector('.badges');
       if (badgesEl) {
         badgesEl.addEventListener('click', e => {
@@ -636,51 +685,38 @@
     userName ? commitVote(userName, optId) : openModal();
   }
 
-  async function commitVote(name, optId) {
-    // ── Snapshot for rollback ──────────────────────────────────
-    const prevUserVotes = new Set(userVotes);
-    const prevVoters    = OPTIONS.map(o => ({ id: o.id, voters: o.voters.map(v => ({ ...v })) }));
-    const wasVoted      = userVotes.has(optId);
+  function commitVote(name, optId) {
+    const opt = OPTIONS.find(o => o.id === optId);
+    if (!opt) return;
 
-    // ── Optimistic update — render instantly before network ───
     if (currentVoteType === 'one') {
       OPTIONS.forEach(o => { o.voters = o.voters.filter(v => v.name !== name); });
+      Object.keys(savedTs).forEach(k => delete savedTs[k]);
       userVotes.clear();
-      const opt = OPTIONS.find(o => o.id === optId);
-      if (opt) { userVotes.add(optId); opt.voters.push({ name, ts: '' }); }
+      const ts = formatTs();
+      userVotes.add(optId);
+      opt.voters.push({ name, ts });
+      savedTs[optId] = ts;
     } else {
-      const opt = OPTIONS.find(o => o.id === optId);
-      if (opt) {
-        if (wasVoted) {
-          userVotes.delete(optId);
-          opt.voters = opt.voters.filter(v => v.name !== name);
-        } else {
-          userVotes.add(optId);
-          if (!opt.voters.some(v => v.name === name)) opt.voters.push({ name, ts: '' });
-        }
+      if (userVotes.has(optId)) {
+        userVotes.delete(optId);
+        opt.voters = opt.voters.filter(v => v.name !== name);
+        delete savedTs[optId];
+      } else {
+        const ts = formatTs();
+        userVotes.add(optId);
+        if (!opt.voters.some(v => v.name === name)) opt.voters.push({ name, ts });
+        savedTs[optId] = ts;
       }
     }
 
-    localStorage.setItem('poll_name', name);
-    render(); // instant — user sees the change before the network round-trip
-
-    // ── Background sync — reconcile with server ───────────────
-    try {
-      const data = await apiPost('/api/vote', { voterName: name, optionId: optId });
-      applyPollData(data); // fills in real timestamps + any concurrent votes
-      render();
-    } catch (err) {
-      console.error('Vote failed — rolling back:', err.message);
-      userVotes = prevUserVotes;
-      prevVoters.forEach(sv => {
-        const o = OPTIONS.find(o => o.id === sv.id);
-        if (o) o.voters = sv.voters;
-      });
-      render();
-    }
+    localStorage.setItem(KEYS.name,       name);
+    localStorage.setItem(KEYS.votes,      JSON.stringify([...userVotes]));
+    localStorage.setItem(KEYS.timestamps, JSON.stringify(savedTs));
+    render();
   }
 
-  // ── Name modal ───────────────────────────────────────────────────
+  // ── Name-entry modal ─────────────────────────────────────────────
   const nameInput = document.getElementById('name-input');
   const btnVote   = document.getElementById('btn-vote');
 
@@ -705,7 +741,7 @@
     const name = nameInput.value.trim();
     if (!name) return;
     userName = capitaliseName(name);
-    const voteTarget = pendingVoteId;   // capture before closeModal() nulls it
+    const voteTarget = pendingVoteId;
     closeModal();
     commitVote(userName, voteTarget);
   });
@@ -716,8 +752,65 @@
     if (e.target === e.currentTarget) closeModal();
   });
 
+  // ── Edit name modal ──────────────────────────────────────────────
+  const editNameInput  = document.getElementById('edit-name-input');
+  const editNameSave   = document.getElementById('edit-name-save');
+  const editNameCancel = document.getElementById('edit-name-cancel');
+
+  function openEditNameModal() {
+    editNameInput.value   = userName || '';
+    editNameSave.disabled = !(userName || '').trim();
+    document.getElementById('edit-name-overlay').classList.add('show');
+    setTimeout(() => editNameInput.focus(), 150);
+  }
+
+  function closeEditNameModal() {
+    document.getElementById('edit-name-overlay').classList.remove('show');
+    editNameInput.value = '';
+  }
+
+  editNameInput.addEventListener('input', e => {
+    if (e.target.value.length > 0) e.target.value = capitaliseName(e.target.value);
+    editNameSave.disabled = !e.target.value.trim();
+  });
+
+  editNameSave.addEventListener('click', () => {
+    const newName = capitaliseName(editNameInput.value.trim());
+    if (!newName) return;
+
+    const oldName = userName;
+    userName = newName;
+
+    // Update existing voter entries so history reflects the new name
+    if (oldName) {
+      OPTIONS.forEach(opt => {
+        opt.voters.forEach(v => { if (v.name === oldName) v.name = newName; });
+      });
+      // Re-key any vote IDs that were associated with old name (timestamps stay)
+      userVotes = new Set(
+        [...userVotes].filter(id => OPTIONS.some(o => o.id === id))
+      );
+    }
+
+    localStorage.setItem(KEYS.name,       newName);
+    localStorage.setItem(KEYS.votes,      JSON.stringify([...userVotes]));
+    localStorage.setItem(KEYS.timestamps, JSON.stringify(savedTs));
+
+    closeEditNameModal();
+    render();
+  });
+
+  editNameInput.addEventListener('keydown', e => { if (e.key === 'Enter') editNameSave.click(); });
+  editNameCancel.addEventListener('click', closeEditNameModal);
+  document.getElementById('edit-name-overlay').addEventListener('click', e => {
+    if (e.target === e.currentTarget) closeEditNameModal();
+  });
+
+  document.getElementById('open-edit-name').addEventListener('click', openEditNameModal);
+
   // ── Admin panel ──────────────────────────────────────────────────
-  let adminVoteType   = DEFAULT_TYPE;
+  let adminVoteType = DEFAULT_TYPE;
+
   const adminOptsList = document.getElementById('admin-opts-list');
   const addOptBtn     = document.getElementById('add-opt-btn');
   const typeToggle    = document.getElementById('type-toggle');
@@ -736,8 +829,8 @@
     div.className = 'admin-opt-row';
     div.innerHTML = `
       <input type="text" class="admin-opt-input" placeholder="Option ${count + 1}..." maxlength="60">
-      <button class="remove-opt-btn" type="button" aria-label="Remove">✕</button>`;
-    div.querySelector('.admin-opt-input').value = value;   // value via property — XSS-safe
+      <button class="remove-opt-btn" type="button" aria-label="Remove option">✕</button>`;
+    div.querySelector('.admin-opt-input').value = value;
     div.querySelector('.remove-opt-btn').addEventListener('click', () => {
       div.remove();
       renumberPlaceholders();
@@ -759,7 +852,6 @@
   }
 
   function openAdminPanel() {
-    // Pre-fill with current live poll state
     document.getElementById('admin-q').value = currentQuestion;
     setAdminVoteType(currentVoteType);
     adminOptsList.innerHTML = '';
@@ -788,58 +880,56 @@
   typeToggle.querySelectorAll('.toggle-btn').forEach(btn =>
     btn.addEventListener('click', () => setAdminVoteType(btn.dataset.type))
   );
+
   addOptBtn.addEventListener('click', () => addAdminOptionRow());
   document.getElementById('clear-form-btn').addEventListener('click', clearAdminForm);
 
-  document.getElementById('save-admin-btn').addEventListener('click', async () => {
+  document.getElementById('save-admin-btn').addEventListener('click', () => {
     const q = document.getElementById('admin-q').value.trim();
     if (!q) { alert('Please enter a question.'); return; }
 
-    const options = Array.from(adminOptsList.querySelectorAll('.admin-opt-input'))
+    const optTexts = Array.from(adminOptsList.querySelectorAll('.admin-opt-input'))
       .map(el => el.value.trim()).filter(Boolean);
-    if (options.length === 0) { alert('Please add at least one option.'); return; }
+    if (optTexts.length < 1) { alert('Please add at least one option.'); return; }
 
-    // ── Optimistic: update locally and close instantly ─────────
     currentQuestion = q;
     currentVoteType = adminVoteType;
-    const existingByText = new Map(OPTIONS.map(o => [o.text, o]));
-    OPTIONS = options.map((text, i) =>
-      existingByText.get(text) || { id: `tmp_${i}`, text, voters: [] }
-    );
+
+    OPTIONS.length = 0;
+    optTexts.forEach((text, i) => OPTIONS.push({ id: 'opt_' + i, text, voters: [] }));
+
     userVotes = new Set();
-    if (userName) {
-      OPTIONS.forEach(opt => {
-        if (opt.voters.some(v => v.name === userName)) userVotes.add(opt.id);
-      });
-    }
+    savedTs   = {};
+    localStorage.removeItem(KEYS.votes);
+    localStorage.removeItem(KEYS.timestamps);
+
+    localStorage.setItem(KEYS.config, JSON.stringify({
+      question: currentQuestion,
+      voteType: currentVoteType,
+      options:  optTexts,
+    }));
+
     document.getElementById('poll-question').textContent = currentQuestion;
     document.getElementById('vt-label').textContent =
       currentVoteType === 'one' ? 'Select one' : 'Select multiple';
+
     closeAdminPanel();
     render();
-
-    // ── Background sync ────────────────────────────────────────
-    try {
-      const data = await apiPost('/api/admin/config', {
-        question: q, voteType: adminVoteType, options,
-      });
-      applyPollData(data);
-      render();
-    } catch (err) {
-      alert('Save failed: ' + err.message);
-    }
   });
 
-  document.getElementById('clear-votes-btn').addEventListener('click', async () => {
+  document.getElementById('clear-votes-btn').addEventListener('click', () => {
     if (!confirm('Clear all votes and data? This cannot be undone.')) return;
-    try {
-      const data = await apiDelete('/api/admin/votes');
-      applyPollData(data);
-      closeAdminPanel();
-      render();
-    } catch (err) {
-      alert('Clear failed: ' + err.message);
-    }
+    Object.values(KEYS).forEach(k => localStorage.removeItem(k));
+    currentQuestion = DEFAULT_Q;
+    currentVoteType = DEFAULT_TYPE;
+    OPTIONS.length  = 0;
+    userVotes       = new Set();
+    savedTs         = {};
+    userName        = null;
+    document.getElementById('poll-question').textContent = DEFAULT_Q;
+    document.getElementById('vt-label').textContent      = 'Select multiple';
+    closeAdminPanel();
+    render();
   });
 
   document.getElementById('close-admin').addEventListener('click', closeAdminPanel);
@@ -898,7 +988,7 @@
   document.getElementById('close-votes').addEventListener('click', closeVotesPanel);
 
   // ── Init ─────────────────────────────────────────────────────────
-  loadPoll().then(startRefresh);
+  render();
 </script>
 
 </body>
