@@ -26,7 +26,7 @@
       padding: 32px 16px;
     }
 
-    /* ── Poll card — transparent, no box ──────────────────────── */
+    /* ── Poll card ─────────────────────────────────────────────── */
     .card {
       background: transparent;
       padding: 20px 20px 0;
@@ -90,7 +90,6 @@
       gap: 9px; flex-shrink: 0; margin-left: 12px;
     }
 
-    /* Badges open the votes panel on click */
     .badges { display: flex; align-items: center; cursor: pointer; }
 
     .badge {
@@ -107,7 +106,7 @@
     .bar-track { background: #2a3942; border-radius: 4px; height: 8px; overflow: hidden; }
     .bar-fill  { background: #25d366; height: 100%; border-radius: 4px; width: 0; }
 
-    /* ── Card footer (View votes row) ─────────────────────────── */
+    /* ── Card footer ───────────────────────────────────────────── */
     .card-footer {
       border-top: 1px solid #2a3942;
       margin-top: 20px;
@@ -123,16 +122,13 @@
       font-family: inherit; cursor: pointer;
     }
 
-    /* ── Bottom action row — both buttons, pushed 300px down ──── */
-    .admin-row {
+    /* ── Edit name row — sits directly below the footer ───────── */
+    .edit-name-row {
       display: flex;
-      justify-content: space-between;
-      align-items: center;
-      padding: 0 0 10px;
-      margin-top: 300px;
+      justify-content: flex-start;
+      padding: 10px 0 0;
     }
 
-    /* Edit name button — ~2× the admin button */
     .edit-name-btn {
       background: none;
       border: 1px solid #3a4e5a;
@@ -146,7 +142,14 @@
 
     .edit-name-btn:hover { border-color: #25d366; color: #25d366; }
 
-    /* Admin button — dark red, clearly not for clicking */
+    /* ── Admin row — 100px below edit name, flush right ───────── */
+    .admin-row {
+      display: flex;
+      justify-content: flex-end;
+      padding: 0 0 40px;
+      margin-top: 100px;
+    }
+
     .admin-btn {
       background: none;
       border: 1px solid #5a1a1a;
@@ -309,10 +312,52 @@
 
     .admin-divider { border-top: 1px solid #2a3942; margin: 18px 0 14px; }
 
+    /* ── Danger zone: clear votes ──────────────────────────────── */
     .danger-btn {
       background: #2a3942; border: none; border-radius: 8px;
       color: #ff6b6b; font-size: 13px; font-family: inherit;
       padding: 11px 0; width: 100%; cursor: pointer; margin-bottom: 10px;
+    }
+
+    /* ── Advanced disclosure (clear identity) ─────────────────── */
+    .advanced-toggle {
+      background: none; border: none;
+      color: #4a5c66; font-size: 11px;
+      font-family: inherit; cursor: pointer;
+      padding: 4px 0 10px; display: flex; align-items: center; gap: 5px;
+      width: 100%;
+    }
+
+    .advanced-toggle:hover { color: #8696a0; }
+
+    .advanced-chevron {
+      display: inline-block;
+      transition: transform 0.2s;
+      font-style: normal;
+      font-size: 9px;
+    }
+
+    .advanced-chevron.open { transform: rotate(90deg); }
+
+    .advanced-content {
+      background: #192028;
+      border-radius: 8px;
+      padding: 12px 14px;
+      margin-bottom: 12px;
+      display: none;
+    }
+
+    .advanced-content.show { display: block; }
+
+    .advanced-desc {
+      color: #4a5c66; font-size: 11px; line-height: 1.55;
+      margin-bottom: 10px;
+    }
+
+    .danger-btn-sm {
+      background: #2a3942; border: none; border-radius: 8px;
+      color: #c0504a; font-size: 12px; font-family: inherit;
+      padding: 9px 0; width: 100%; cursor: pointer;
     }
 
     .save-btn {
@@ -321,15 +366,27 @@
       padding: 11px 0; width: 100%; cursor: pointer;
     }
 
-    /* ── Votes panel ──────────────────────────────────────────── */
+    /* ── Votes panel ──────────────────────────────────────────────
+       visibility: hidden is added so iOS rubber-band overscroll
+       cannot reveal the translated-off-screen panel. The delay on
+       the hiding transition ensures it only hides AFTER the slide-
+       out animation completes (0.32s). On open, visibility fires
+       immediately so the slide-in is visible from the first frame. */
     .votes-panel {
       position: fixed; inset: 0; background: #111b21;
       z-index: 200; display: flex; flex-direction: column;
       transform: translateY(100%);
-      transition: transform 0.32s cubic-bezier(0.4, 0, 0.2, 1);
+      visibility: hidden;
+      transition: transform 0.32s cubic-bezier(0.4, 0, 0.2, 1),
+                  visibility 0s linear 0.32s;
     }
 
-    .votes-panel.show { transform: translateY(0); }
+    .votes-panel.show {
+      transform: translateY(0);
+      visibility: visible;
+      transition: transform 0.32s cubic-bezier(0.4, 0, 0.2, 1),
+                  visibility 0s linear 0s;
+    }
 
     .votes-header {
       display: flex; align-items: center; gap: 18px;
@@ -396,14 +453,18 @@
     <button class="view-votes-btn" id="open-votes">View votes</button>
   </div>
 
-  <!-- Edit name + Admin row — 300px below the footer -->
-  <div class="admin-row">
+  <!-- Edit name — directly below footer, flows with content -->
+  <div class="edit-name-row">
     <button class="edit-name-btn" id="open-edit-name" aria-label="Edit name">
       <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden="true">
         <path d="M9.5 1.5a1.414 1.414 0 0 1 2 2L4 11H1.5V8.5L9.5 1.5Z" stroke="#8696a0" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>
       </svg>
       Edit name
     </button>
+  </div>
+
+  <!-- Admin — 100px below edit name, flush right -->
+  <div class="admin-row">
     <button class="admin-btn" id="open-admin" aria-label="Admin">
       <svg width="7" height="9" viewBox="0 0 11 13" fill="none" aria-hidden="true">
         <rect x="1" y="5" width="9" height="7.5" rx="1.5" stroke="#5a1a1a" stroke-width="1.4"/>
@@ -429,7 +490,7 @@
 <!-- Edit name modal -->
 <div class="overlay" id="edit-name-overlay">
   <div class="modal">
-    <p class="modal-title" id="edit-name-title">Edit your name</p>
+    <p class="modal-title">Edit your name</p>
     <input type="text" id="edit-name-input" placeholder="Your name..." maxlength="30" autocomplete="off">
     <div class="modal-actions">
       <button class="btn-cancel" id="edit-name-cancel">Cancel</button>
@@ -449,7 +510,7 @@
             <rect x="1" y="5.5" width="10" height="8" rx="1.5" stroke="#e9edef" stroke-width="1.4"/>
             <path d="M4 5.5V4a2 2 0 0 1 4 0v1.5" stroke="#e9edef" stroke-width="1.4" stroke-linecap="round"/>
           </svg>
-          Admin — don't touch this
+          Admin Only — please don't touch
         </span>
         <button class="admin-close" id="close-admin">✕</button>
       </div>
@@ -476,7 +537,20 @@
       </button>
 
       <div class="admin-divider"></div>
-      <button class="danger-btn" id="clear-votes-btn">Clear votes &amp; cookies</button>
+
+      <!-- Clear votes (primary action) -->
+      <button class="danger-btn" id="clear-votes-btn">Clear votes</button>
+
+      <!-- Advanced disclosure: reset stored identity -->
+      <button class="advanced-toggle" id="advanced-toggle">
+        <span class="advanced-chevron" id="advanced-chevron">▶</span>
+        Advanced
+      </button>
+      <div class="advanced-content" id="advanced-content">
+        <p class="advanced-desc">Removes the name saved in this browser. Use only if someone needs to vote under a different identity on this device.</p>
+        <button class="danger-btn-sm" id="clear-identity-btn">Reset stored identity</button>
+      </div>
+
       <button class="save-btn" id="save-admin-btn">Save &amp; close</button>
 
     </div>
@@ -498,7 +572,7 @@
 
 <script>
   // ── Config ──────────────────────────────────────────────────────
-  const POLL_ID      = window.POLL_ID || 'poll_09';
+  const POLL_ID      = window.POLL_ID || 'poll_10';
   const DEFAULT_Q    = 'When can we meet?';
   const DEFAULT_TYPE = 'multiple';
 
@@ -519,12 +593,23 @@
   let savedTs       = {};
   let pendingVoteId = null;
 
-  // ── Animation gate — prevents mid-animation re-renders ──────────
+  // ── Animation gate ───────────────────────────────────────────────
+  // Prevents a mid-animation re-render from interrupting the bar
+  // transition. render() defers if an animation is running; _doRender()
+  // picks it up once the current cycle finishes.
   const ANIM_MS   = 450;
   let _animating  = false;
   let _needRender = false;
 
-  // ── Bootstrap: restore saved config then votes ──────────────────
+  // ── Double-tap guard ─────────────────────────────────────────────
+  // Research-backed threshold: taps arriving within 300 ms of the
+  // previous tap are treated as accidental (fat-finger / bounce).
+  // Taps after 300 ms are intentional "change of mind" and are queued
+  // via the animation gate so the bar completes before rolling back.
+  const DOUBLE_TAP_MS = 300;
+  let _lastTapTime    = 0;
+
+  // ── Bootstrap ────────────────────────────────────────────────────
   function restoreConfig() {
     const raw = localStorage.getItem(KEYS.config);
     if (!raw) return;
@@ -585,11 +670,10 @@
     return `${d.getDate()} ${mo[d.getMonth()]}, ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
   }
 
-  // ── Render poll ──────────────────────────────────────────────────
-  // Public entry point — defers if an animation is already running
+  // ── Render ───────────────────────────────────────────────────────
   function render() {
     if (_animating) {
-      _needRender = true;   // state changed; re-render once current anim finishes
+      _needRender = true;
       return;
     }
     _doRender();
@@ -602,7 +686,6 @@
     const container = document.getElementById('options');
     const max       = OPTIONS.length ? Math.max(...OPTIONS.map(o => o.voters.length), 1) : 1;
 
-    // Snapshot current bar widths BEFORE rebuilding the DOM
     const oldWidths = Array.from(container.querySelectorAll('.bar-fill'))
       .map(el => parseFloat(el.style.width) || 0);
 
@@ -639,7 +722,6 @@
         </div>`;
     }).join('');
 
-    // Set bars to their previous positions instantly, then animate to new positions
     const bars = Array.from(container.querySelectorAll('.bar-fill'));
     bars.forEach((bar, i) => {
       bar.style.transition = 'none';
@@ -651,18 +733,12 @@
         bar.style.transition = `width ${ANIM_MS}ms cubic-bezier(0.4, 0, 0.2, 1)`;
         bar.style.width      = bar.dataset.pct + '%';
       });
-
-      // Release the gate after animation completes; run queued render if needed
       setTimeout(() => {
         _animating = false;
-        if (_needRender) {
-          _needRender = false;
-          _doRender();
-        }
-      }, ANIM_MS + 20); // small buffer past animation end
+        if (_needRender) { _needRender = false; _doRender(); }
+      }, ANIM_MS + 20);
     }));
 
-    // Re-attach event listeners (synchronous — runs immediately after innerHTML)
     container.querySelectorAll('.option').forEach(el => {
       el.querySelector('.radio').addEventListener('click', e => {
         e.stopPropagation();
@@ -680,6 +756,10 @@
 
   // ── Vote logic ───────────────────────────────────────────────────
   function handleVote(optId) {
+    const now = Date.now();
+    if (now - _lastTapTime < DOUBLE_TAP_MS) return; // accidental double-tap: ignore
+    _lastTapTime = now;
+
     if (currentVoteType === 'one' && userVotes.has(optId)) return;
     pendingVoteId = optId;
     userName ? commitVote(userName, optId) : openModal();
@@ -777,25 +857,17 @@
   editNameSave.addEventListener('click', () => {
     const newName = capitaliseName(editNameInput.value.trim());
     if (!newName) return;
-
     const oldName = userName;
     userName = newName;
-
-    // Update existing voter entries so history reflects the new name
     if (oldName) {
       OPTIONS.forEach(opt => {
         opt.voters.forEach(v => { if (v.name === oldName) v.name = newName; });
       });
-      // Re-key any vote IDs that were associated with old name (timestamps stay)
-      userVotes = new Set(
-        [...userVotes].filter(id => OPTIONS.some(o => o.id === id))
-      );
+      userVotes = new Set([...userVotes].filter(id => OPTIONS.some(o => o.id === id)));
     }
-
     localStorage.setItem(KEYS.name,       newName);
     localStorage.setItem(KEYS.votes,      JSON.stringify([...userVotes]));
     localStorage.setItem(KEYS.timestamps, JSON.stringify(savedTs));
-
     closeEditNameModal();
     render();
   });
@@ -805,7 +877,6 @@
   document.getElementById('edit-name-overlay').addEventListener('click', e => {
     if (e.target === e.currentTarget) closeEditNameModal();
   });
-
   document.getElementById('open-edit-name').addEventListener('click', openEditNameModal);
 
   // ── Admin panel ──────────────────────────────────────────────────
@@ -860,6 +931,9 @@
     } else {
       addAdminOptionRow(); addAdminOptionRow();
     }
+    // Reset advanced section
+    document.getElementById('advanced-content').classList.remove('show');
+    document.getElementById('advanced-chevron').classList.remove('open');
     document.getElementById('admin-overlay').classList.add('show');
     document.body.style.overflow = 'hidden';
   }
@@ -876,6 +950,14 @@
     addAdminOptionRow(); addAdminOptionRow();
     updateAddOptVisibility();
   }
+
+  // Advanced disclosure toggle
+  document.getElementById('advanced-toggle').addEventListener('click', () => {
+    const content  = document.getElementById('advanced-content');
+    const chevron  = document.getElementById('advanced-chevron');
+    const isOpen   = content.classList.toggle('show');
+    chevron.classList.toggle('open', isOpen);
+  });
 
   typeToggle.querySelectorAll('.toggle-btn').forEach(btn =>
     btn.addEventListener('click', () => setAdminVoteType(btn.dataset.type))
@@ -917,19 +999,24 @@
     render();
   });
 
+  // Clear votes only (keeps name and config)
   document.getElementById('clear-votes-btn').addEventListener('click', () => {
-    if (!confirm('Clear all votes and data? This cannot be undone.')) return;
-    Object.values(KEYS).forEach(k => localStorage.removeItem(k));
-    currentQuestion = DEFAULT_Q;
-    currentVoteType = DEFAULT_TYPE;
-    OPTIONS.length  = 0;
-    userVotes       = new Set();
-    savedTs         = {};
-    userName        = null;
-    document.getElementById('poll-question').textContent = DEFAULT_Q;
-    document.getElementById('vt-label').textContent      = 'Select multiple';
+    if (!confirm('Clear all votes? This cannot be undone.')) return;
+    OPTIONS.forEach(o => { o.voters = []; });
+    userVotes = new Set();
+    savedTs   = {};
+    localStorage.removeItem(KEYS.votes);
+    localStorage.removeItem(KEYS.timestamps);
     closeAdminPanel();
     render();
+  });
+
+  // Reset stored identity only (keeps votes and config)
+  document.getElementById('clear-identity-btn').addEventListener('click', () => {
+    if (!confirm('Remove the saved name from this browser?')) return;
+    userName = null;
+    localStorage.removeItem(KEYS.name);
+    closeAdminPanel();
   });
 
   document.getElementById('close-admin').addEventListener('click', closeAdminPanel);
