@@ -3,11 +3,15 @@
 <!--
   Poll — self-contained frontend
   Serve as: public/index.html  (Express / Docker)
-  Also opens directly in Chrome as a local file (localStorage mode)
 
-  To inject a poll ID from the server:
-    <script>window.POLL_ID = 'room_xyz';<\/script>  (before this file loads)
-  All fetch() calls use relative paths (/api/...) — no hardcoded localhost.
+  State is server-authoritative (SQLite via Express API).
+  The ONLY thing stored in localStorage is the voter's name.
+
+  API surface:
+    GET    /api/poll           → { question, voteType, options:[{id,text,voters:[{name,ts}]}] }
+    POST   /api/vote           ← { voterName, optionId }  → same shape
+    POST   /api/admin/config   ← { question, voteType, options:[] } → same shape
+    DELETE /api/admin/votes    → same shape (resets everything)
 -->
 <head>
   <meta charset="UTF-8">
@@ -26,7 +30,6 @@
       padding: 32px 16px;
     }
 
-    /* ── Poll card ─────────────────────────────────────────────── */
     .card {
       background: transparent;
       padding: 20px 20px 0;
@@ -106,15 +109,25 @@
     .bar-track { background: #2a3942; border-radius: 4px; height: 8px; overflow: hidden; }
     .bar-fill  { background: #25d366; height: 100%; border-radius: 4px; width: 0; }
 
-    /* ── Card footer ───────────────────────────────────────────── */
+    /* ── Card footer — 3-col grid keeps View votes truly centred ── */
     .card-footer {
       border-top: 1px solid #2a3942;
       margin-top: 20px;
       padding: 13px 0;
-      display: flex;
+      display: grid;
+      grid-template-columns: 1fr auto 1fr;
       align-items: center;
-      justify-content: center;
     }
+
+    .edit-name-btn {
+      background: none; border: none;
+      color: #8696a0; font-size: 14px; font-weight: 500;
+      font-family: inherit; cursor: pointer;
+      text-align: left; padding: 0;
+      transition: color 0.15s;
+    }
+
+    .edit-name-btn:hover { color: #e9edef; }
 
     .view-votes-btn {
       background: none; border: none;
@@ -122,27 +135,7 @@
       font-family: inherit; cursor: pointer;
     }
 
-    /* ── Edit name row — sits directly below the footer ───────── */
-    .edit-name-row {
-      display: flex;
-      justify-content: flex-start;
-      padding: 10px 0 0;
-    }
-
-    .edit-name-btn {
-      background: none;
-      border: 1px solid #3a4e5a;
-      border-radius: 20px;
-      padding: 6px 16px;
-      display: flex; align-items: center; gap: 6px;
-      cursor: pointer; color: #8696a0;
-      font-size: 15px; font-family: inherit;
-      transition: border-color 0.15s, color 0.15s;
-    }
-
-    .edit-name-btn:hover { border-color: #25d366; color: #25d366; }
-
-    /* ── Admin row — 100px below edit name, flush right ───────── */
+    /* ── Admin row — 100px below footer, flush right ───────────── */
     .admin-row {
       display: flex;
       justify-content: flex-end;
@@ -160,7 +153,7 @@
       font-size: 7.5px; font-family: inherit;
     }
 
-    /* ── Name-entry modal ─────────────────────────────────────── */
+    /* ── Modals ───────────────────────────────────────────────── */
     .overlay {
       position: fixed; inset: 0;
       background: rgba(0,0,0,0.65);
@@ -312,14 +305,12 @@
 
     .admin-divider { border-top: 1px solid #2a3942; margin: 18px 0 14px; }
 
-    /* ── Danger zone: clear votes ──────────────────────────────── */
     .danger-btn {
       background: #2a3942; border: none; border-radius: 8px;
       color: #ff6b6b; font-size: 13px; font-family: inherit;
       padding: 11px 0; width: 100%; cursor: pointer; margin-bottom: 10px;
     }
 
-    /* ── Advanced disclosure (clear identity) ─────────────────── */
     .advanced-toggle {
       background: none; border: none;
       color: #4a5c66; font-size: 11px;
@@ -333,25 +324,21 @@
     .advanced-chevron {
       display: inline-block;
       transition: transform 0.2s;
-      font-style: normal;
       font-size: 9px;
     }
 
     .advanced-chevron.open { transform: rotate(90deg); }
 
     .advanced-content {
-      background: #192028;
-      border-radius: 8px;
-      padding: 12px 14px;
-      margin-bottom: 12px;
+      background: #192028; border-radius: 8px;
+      padding: 12px 14px; margin-bottom: 12px;
       display: none;
     }
 
     .advanced-content.show { display: block; }
 
     .advanced-desc {
-      color: #4a5c66; font-size: 11px; line-height: 1.55;
-      margin-bottom: 10px;
+      color: #4a5c66; font-size: 11px; line-height: 1.55; margin-bottom: 10px;
     }
 
     .danger-btn-sm {
@@ -367,11 +354,9 @@
     }
 
     /* ── Votes panel ──────────────────────────────────────────────
-       visibility: hidden is added so iOS rubber-band overscroll
-       cannot reveal the translated-off-screen panel. The delay on
-       the hiding transition ensures it only hides AFTER the slide-
-       out animation completes (0.32s). On open, visibility fires
-       immediately so the slide-in is visible from the first frame. */
+       visibility:hidden prevents iOS rubber-band overscroll from
+       revealing the off-screen panel. Delay matches slide-out (0.32s)
+       so the panel hides only after the exit animation finishes. */
     .votes-panel {
       position: fixed; inset: 0; background: #111b21;
       z-index: 200; display: flex; flex-direction: column;
@@ -449,21 +434,14 @@
 
   <div id="options"></div>
 
+  <!-- Footer: Edit name (left) | View votes (centre) | spacer (right) -->
   <div class="card-footer">
+    <button class="edit-name-btn" id="open-edit-name">Edit name</button>
     <button class="view-votes-btn" id="open-votes">View votes</button>
+    <div></div>
   </div>
 
-  <!-- Edit name — directly below footer, flows with content -->
-  <div class="edit-name-row">
-    <button class="edit-name-btn" id="open-edit-name" aria-label="Edit name">
-      <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden="true">
-        <path d="M9.5 1.5a1.414 1.414 0 0 1 2 2L4 11H1.5V8.5L9.5 1.5Z" stroke="#8696a0" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>
-      </svg>
-      Edit name
-    </button>
-  </div>
-
-  <!-- Admin — 100px below edit name, flush right -->
+  <!-- Admin — 100px below footer, flush right -->
   <div class="admin-row">
     <button class="admin-btn" id="open-admin" aria-label="Admin">
       <svg width="7" height="9" viewBox="0 0 11 13" fill="none" aria-hidden="true">
@@ -538,10 +516,8 @@
 
       <div class="admin-divider"></div>
 
-      <!-- Clear votes (primary action) -->
       <button class="danger-btn" id="clear-votes-btn">Clear votes</button>
 
-      <!-- Advanced disclosure: reset stored identity -->
       <button class="advanced-toggle" id="advanced-toggle">
         <span class="advanced-chevron" id="advanced-chevron">▶</span>
         Advanced
@@ -571,79 +547,68 @@
 </div>
 
 <script>
-  // ── Config ──────────────────────────────────────────────────────
-  const POLL_ID      = window.POLL_ID || 'poll_10';
+  // ── Constants ────────────────────────────────────────────────────
+  const NAME_KEY     = 'poll_name';   // the ONLY localStorage key
   const DEFAULT_Q    = 'When can we meet?';
   const DEFAULT_TYPE = 'multiple';
-
-  const KEYS = {
-    name:       POLL_ID + '_name',
-    votes:      POLL_ID + '_votes',
-    timestamps: POLL_ID + '_timestamps',
-    config:     POLL_ID + '_config',
-  };
+  const ANIM_MS      = 450;
+  const DOUBLE_TAP_MS = 300;
 
   // ── State ────────────────────────────────────────────────────────
+  // Server is the single source of truth. OPTIONS and question/type
+  // are always loaded from /api/poll and never written to localStorage.
   let currentQuestion = DEFAULT_Q;
   let currentVoteType = DEFAULT_TYPE;
-  const OPTIONS       = [];
+  const OPTIONS       = [];            // [{ id, text, voters:[{name,ts}] }]
 
-  let userName      = localStorage.getItem(KEYS.name) || null;
-  let userVotes     = new Set();
-  let savedTs       = {};
+  let userName      = localStorage.getItem(NAME_KEY) || null;
+  let userVotes     = new Set();       // option IDs the current user has voted for
   let pendingVoteId = null;
 
-  // ── Animation gate ───────────────────────────────────────────────
-  // Prevents a mid-animation re-render from interrupting the bar
-  // transition. render() defers if an animation is running; _doRender()
-  // picks it up once the current cycle finishes.
-  const ANIM_MS   = 450;
-  let _animating  = false;
-  let _needRender = false;
+  let _animating    = false;
+  let _needRender   = false;
+  let _lastTapTime  = 0;
 
-  // ── Double-tap guard ─────────────────────────────────────────────
-  // Research-backed threshold: taps arriving within 300 ms of the
-  // previous tap are treated as accidental (fat-finger / bounce).
-  // Taps after 300 ms are intentional "change of mind" and are queued
-  // via the animation gate so the bar completes before rolling back.
-  const DOUBLE_TAP_MS = 300;
-  let _lastTapTime    = 0;
+  // ── Server API ───────────────────────────────────────────────────
+  async function apiFetch(method, url, body) {
+    try {
+      const opts = { method, headers: { 'Content-Type': 'application/json' } };
+      if (body !== undefined) opts.body = JSON.stringify(body);
+      const res = await fetch(url, opts);
+      if (!res.ok) return null;
+      return await res.json();
+    } catch {
+      return null; // server unavailable (e.g. opened as a local file)
+    }
+  }
 
-  // ── Bootstrap ────────────────────────────────────────────────────
-  function restoreConfig() {
-    const raw = localStorage.getItem(KEYS.config);
-    if (!raw) return;
-    let cfg;
-    try { cfg = JSON.parse(raw); } catch { return; }
-    currentQuestion = cfg.question  || DEFAULT_Q;
-    currentVoteType = cfg.voteType  || DEFAULT_TYPE;
-    (cfg.options || []).forEach((text, i) =>
-      OPTIONS.push({ id: 'opt_' + i, text, voters: [] })
+  // Apply a full poll response from the server into local state.
+  // Does NOT call render() — caller decides when to render.
+  function applyPoll(data) {
+    if (!data) return;
+    currentQuestion = data.question  || DEFAULT_Q;
+    currentVoteType = data.voteType  || DEFAULT_TYPE;
+    OPTIONS.length = 0;
+    (data.options || []).forEach(o =>
+      OPTIONS.push({ id: String(o.id), text: o.text, voters: o.voters || [] })
+    );
+    // Derive which options the current user has voted for
+    userVotes = new Set(
+      OPTIONS.filter(o => o.voters.some(v => v.name === userName)).map(o => o.id)
     );
     document.getElementById('poll-question').textContent = currentQuestion;
     document.getElementById('vt-label').textContent =
       currentVoteType === 'one' ? 'Select one' : 'Select multiple';
   }
 
-  function restoreVotes() {
-    try {
-      const rawV = localStorage.getItem(KEYS.votes);
-      const rawT = localStorage.getItem(KEYS.timestamps);
-      userVotes = new Set(rawV ? JSON.parse(rawV) : []);
-      savedTs   = rawT ? JSON.parse(rawT) : {};
-    } catch { userVotes = new Set(); savedTs = {}; }
-
-    if (!userName || userVotes.size === 0) return;
-    userVotes.forEach(optId => {
-      const opt = OPTIONS.find(o => o.id === optId);
-      if (opt && !opt.voters.some(v => v.name === userName)) {
-        opt.voters.push({ name: userName, ts: savedTs[optId] || '' });
-      }
-    });
+  // ── Bootstrap: load from server ──────────────────────────────────
+  async function init() {
+    const data = await apiFetch('GET', '/api/poll');
+    applyPoll(data);
+    render();
   }
 
-  restoreConfig();
-  restoreVotes();
+  init();
 
   // ── Helpers ──────────────────────────────────────────────────────
   const COLORS = [
@@ -664,18 +629,9 @@
     return str ? str.charAt(0).toUpperCase() + str.slice(1) : str;
   }
 
-  function formatTs() {
-    const d  = new Date();
-    const mo = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-    return `${d.getDate()} ${mo[d.getMonth()]}, ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
-  }
-
   // ── Render ───────────────────────────────────────────────────────
   function render() {
-    if (_animating) {
-      _needRender = true;
-      return;
-    }
+    if (_animating) { _needRender = true; return; }
     _doRender();
   }
 
@@ -757,7 +713,7 @@
   // ── Vote logic ───────────────────────────────────────────────────
   function handleVote(optId) {
     const now = Date.now();
-    if (now - _lastTapTime < DOUBLE_TAP_MS) return; // accidental double-tap: ignore
+    if (now - _lastTapTime < DOUBLE_TAP_MS) return;
     _lastTapTime = now;
 
     if (currentVoteType === 'one' && userVotes.has(optId)) return;
@@ -765,35 +721,42 @@
     userName ? commitVote(userName, optId) : openModal();
   }
 
-  function commitVote(name, optId) {
+  async function commitVote(name, optId) {
     const opt = OPTIONS.find(o => o.id === optId);
     if (!opt) return;
 
+    // Optimistic update — immediate visual feedback
     if (currentVoteType === 'one') {
       OPTIONS.forEach(o => { o.voters = o.voters.filter(v => v.name !== name); });
-      Object.keys(savedTs).forEach(k => delete savedTs[k]);
       userVotes.clear();
-      const ts = formatTs();
+      const ts = _localTs();
       userVotes.add(optId);
       opt.voters.push({ name, ts });
-      savedTs[optId] = ts;
     } else {
       if (userVotes.has(optId)) {
         userVotes.delete(optId);
         opt.voters = opt.voters.filter(v => v.name !== name);
-        delete savedTs[optId];
       } else {
-        const ts = formatTs();
+        const ts = _localTs();
         userVotes.add(optId);
         if (!opt.voters.some(v => v.name === name)) opt.voters.push({ name, ts });
-        savedTs[optId] = ts;
       }
     }
-
-    localStorage.setItem(KEYS.name,       name);
-    localStorage.setItem(KEYS.votes,      JSON.stringify([...userVotes]));
-    localStorage.setItem(KEYS.timestamps, JSON.stringify(savedTs));
     render();
+
+    // Sync to server — server response is authoritative (picks up other users' votes)
+    const data = await apiFetch('POST', '/api/vote', { voterName: name, optionId: optId });
+    if (data) {
+      applyPoll(data);
+      // Only re-render if state differs from optimistic (avoids double animation)
+      render();
+    }
+  }
+
+  function _localTs() {
+    const d  = new Date();
+    const mo = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    return `${d.getDate()} ${mo[d.getMonth()]}, ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
   }
 
   // ── Name-entry modal ─────────────────────────────────────────────
@@ -821,6 +784,7 @@
     const name = nameInput.value.trim();
     if (!name) return;
     userName = capitaliseName(name);
+    localStorage.setItem(NAME_KEY, userName);
     const voteTarget = pendingVoteId;
     closeModal();
     commitVote(userName, voteTarget);
@@ -857,17 +821,12 @@
   editNameSave.addEventListener('click', () => {
     const newName = capitaliseName(editNameInput.value.trim());
     if (!newName) return;
-    const oldName = userName;
     userName = newName;
-    if (oldName) {
-      OPTIONS.forEach(opt => {
-        opt.voters.forEach(v => { if (v.name === oldName) v.name = newName; });
-      });
-      userVotes = new Set([...userVotes].filter(id => OPTIONS.some(o => o.id === id)));
-    }
-    localStorage.setItem(KEYS.name,       newName);
-    localStorage.setItem(KEYS.votes,      JSON.stringify([...userVotes]));
-    localStorage.setItem(KEYS.timestamps, JSON.stringify(savedTs));
+    localStorage.setItem(NAME_KEY, newName);
+    // Recompute which options this (new) name has voted for
+    userVotes = new Set(
+      OPTIONS.filter(o => o.voters.some(v => v.name === newName)).map(o => o.id)
+    );
     closeEditNameModal();
     render();
   });
@@ -931,7 +890,6 @@
     } else {
       addAdminOptionRow(); addAdminOptionRow();
     }
-    // Reset advanced section
     document.getElementById('advanced-content').classList.remove('show');
     document.getElementById('advanced-chevron').classList.remove('open');
     document.getElementById('admin-overlay').classList.add('show');
@@ -951,11 +909,10 @@
     updateAddOptVisibility();
   }
 
-  // Advanced disclosure toggle
   document.getElementById('advanced-toggle').addEventListener('click', () => {
-    const content  = document.getElementById('advanced-content');
-    const chevron  = document.getElementById('advanced-chevron');
-    const isOpen   = content.classList.toggle('show');
+    const content = document.getElementById('advanced-content');
+    const chevron = document.getElementById('advanced-chevron');
+    const isOpen  = content.classList.toggle('show');
     chevron.classList.toggle('open', isOpen);
   });
 
@@ -966,7 +923,7 @@
   addOptBtn.addEventListener('click', () => addAdminOptionRow());
   document.getElementById('clear-form-btn').addEventListener('click', clearAdminForm);
 
-  document.getElementById('save-admin-btn').addEventListener('click', () => {
+  document.getElementById('save-admin-btn').addEventListener('click', async () => {
     const q = document.getElementById('admin-q').value.trim();
     if (!q) { alert('Please enter a question.'); return; }
 
@@ -974,49 +931,37 @@
       .map(el => el.value.trim()).filter(Boolean);
     if (optTexts.length < 1) { alert('Please add at least one option.'); return; }
 
-    currentQuestion = q;
-    currentVoteType = adminVoteType;
-
-    OPTIONS.length = 0;
-    optTexts.forEach((text, i) => OPTIONS.push({ id: 'opt_' + i, text, voters: [] }));
-
-    userVotes = new Set();
-    savedTs   = {};
-    localStorage.removeItem(KEYS.votes);
-    localStorage.removeItem(KEYS.timestamps);
-
-    localStorage.setItem(KEYS.config, JSON.stringify({
-      question: currentQuestion,
-      voteType: currentVoteType,
-      options:  optTexts,
-    }));
-
-    document.getElementById('poll-question').textContent = currentQuestion;
-    document.getElementById('vt-label').textContent =
-      currentVoteType === 'one' ? 'Select one' : 'Select multiple';
-
+    const data = await apiFetch('POST', '/api/admin/config', {
+      question: q, voteType: adminVoteType, options: optTexts,
+    });
+    applyPoll(data);
     closeAdminPanel();
     render();
   });
 
-  // Clear votes only (keeps name and config)
-  document.getElementById('clear-votes-btn').addEventListener('click', () => {
+  // Clear votes only: save current config → wipe → re-apply config
+  document.getElementById('clear-votes-btn').addEventListener('click', async () => {
     if (!confirm('Clear all votes? This cannot be undone.')) return;
-    OPTIONS.forEach(o => { o.voters = []; });
-    userVotes = new Set();
-    savedTs   = {};
-    localStorage.removeItem(KEYS.votes);
-    localStorage.removeItem(KEYS.timestamps);
+    const savedQ    = currentQuestion;
+    const savedType = currentVoteType;
+    const savedOpts = OPTIONS.map(o => o.text);
+    await apiFetch('DELETE', '/api/admin/votes');
+    const data = await apiFetch('POST', '/api/admin/config', {
+      question: savedQ, voteType: savedType, options: savedOpts,
+    });
+    applyPoll(data);
     closeAdminPanel();
     render();
   });
 
-  // Reset stored identity only (keeps votes and config)
+  // Reset stored identity: name-only, server-side votes unaffected
   document.getElementById('clear-identity-btn').addEventListener('click', () => {
     if (!confirm('Remove the saved name from this browser?')) return;
     userName = null;
-    localStorage.removeItem(KEYS.name);
+    localStorage.removeItem(NAME_KEY);
+    userVotes = new Set();
     closeAdminPanel();
+    render();
   });
 
   document.getElementById('close-admin').addEventListener('click', closeAdminPanel);
@@ -1073,9 +1018,6 @@
 
   document.getElementById('open-votes').addEventListener('click', openVotesPanel);
   document.getElementById('close-votes').addEventListener('click', closeVotesPanel);
-
-  // ── Init ─────────────────────────────────────────────────────────
-  render();
 </script>
 
 </body>
