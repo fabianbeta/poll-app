@@ -4,7 +4,7 @@
   Poll — self-contained frontend
   Serve as: public/index.html  (Express / Docker)
 
-  State is server-authoritative (SQLite via Express API).
+  Server is the single source of truth (SQLite via Express API).
   The ONLY thing stored in localStorage is the voter's name.
 
   API surface:
@@ -109,7 +109,7 @@
     .bar-track { background: #2a3942; border-radius: 4px; height: 8px; overflow: hidden; }
     .bar-fill  { background: #25d366; height: 100%; border-radius: 4px; width: 0; }
 
-    /* ── Card footer — 3-col grid keeps View votes truly centred ── */
+    /* ── Footer: 3-col grid keeps View votes truly centred ──────── */
     .card-footer {
       border-top: 1px solid #2a3942;
       margin-top: 20px;
@@ -119,11 +119,14 @@
       align-items: center;
     }
 
+    /* Shows current user name (or "Set name" if unset) */
     .edit-name-btn {
       background: none; border: none;
       color: #8696a0; font-size: 14px; font-weight: 500;
       font-family: inherit; cursor: pointer;
       text-align: left; padding: 0;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      max-width: 120px;
       transition: color 0.15s;
     }
 
@@ -153,7 +156,8 @@
       font-size: 7.5px; font-family: inherit;
     }
 
-    /* ── Modals ───────────────────────────────────────────────── */
+    /* ── Modals ───────────────────────────────────────────────────
+       Both name-entry and edit-name share these classes.           */
     .overlay {
       position: fixed; inset: 0;
       background: rgba(0,0,0,0.65);
@@ -173,7 +177,8 @@
     }
 
     .overlay.show .modal { transform: scale(1); }
-    .modal-title { color: #e9edef; font-size: 15px; font-weight: 500; margin-bottom: 14px; }
+    .modal-title { color: #e9edef; font-size: 15px; font-weight: 500; margin-bottom: 6px; }
+    .modal-hint  { color: #8696a0; font-size: 11px; line-height: 1.5; margin-bottom: 14px; }
 
     .modal input {
       background: #2a3942; border: none; border-radius: 8px;
@@ -311,6 +316,9 @@
       padding: 11px 0; width: 100%; cursor: pointer; margin-bottom: 10px;
     }
 
+    .danger-btn:disabled { opacity: 0.5; cursor: default; }
+
+    /* ── Advanced disclosure ──────────────────────────────────── */
     .advanced-toggle {
       background: none; border: none;
       color: #4a5c66; font-size: 11px;
@@ -341,11 +349,14 @@
       color: #4a5c66; font-size: 11px; line-height: 1.55; margin-bottom: 10px;
     }
 
-    .danger-btn-sm {
-      background: #2a3942; border: none; border-radius: 8px;
-      color: #c0504a; font-size: 12px; font-family: inherit;
+    .danger-btn-nuke {
+      background: #3a1010; border: 1px solid #7b1a1a; border-radius: 8px;
+      color: #ff6b6b; font-size: 12px; font-family: inherit;
       padding: 9px 0; width: 100%; cursor: pointer;
+      font-weight: 600;
     }
+
+    .danger-btn-nuke:disabled { opacity: 0.5; cursor: default; }
 
     .save-btn {
       background: #25d366; border: none; border-radius: 24px;
@@ -353,10 +364,13 @@
       padding: 11px 0; width: 100%; cursor: pointer;
     }
 
+    .save-btn:disabled { opacity: 0.5; cursor: default; }
+
     /* ── Votes panel ──────────────────────────────────────────────
        visibility:hidden prevents iOS rubber-band overscroll from
-       revealing the off-screen panel. Delay matches slide-out (0.32s)
-       so the panel hides only after the exit animation finishes. */
+       revealing the translated-off-screen panel. The delay on
+       hiding matches the slide-out duration so it vanishes only
+       after the exit animation completes.                         */
     .votes-panel {
       position: fixed; inset: 0; background: #111b21;
       z-index: 200; display: flex; flex-direction: column;
@@ -434,9 +448,9 @@
 
   <div id="options"></div>
 
-  <!-- Footer: Edit name (left) | View votes (centre) | spacer (right) -->
+  <!-- Footer: name/edit (left) | View votes (centre) | spacer (right) -->
   <div class="card-footer">
-    <button class="edit-name-btn" id="open-edit-name">Edit name</button>
+    <button class="edit-name-btn" id="open-edit-name">Set name</button>
     <button class="view-votes-btn" id="open-votes">View votes</button>
     <div></div>
   </div>
@@ -453,7 +467,7 @@
   </div>
 </div>
 
-<!-- Name-entry modal -->
+<!-- Name-entry modal (first-time voters) -->
 <div class="overlay" id="overlay">
   <div class="modal">
     <p class="modal-title">Enter your name</p>
@@ -465,14 +479,15 @@
   </div>
 </div>
 
-<!-- Edit name modal -->
+<!-- Edit / Reclaim name modal -->
 <div class="overlay" id="edit-name-overlay">
   <div class="modal">
-    <p class="modal-title">Edit your name</p>
+    <p class="modal-title">Edit / Reclaim name</p>
+    <p class="modal-hint">To reclaim your existing votes, type your name as you originally entered it — not case-sensitive.</p>
     <input type="text" id="edit-name-input" placeholder="Your name..." maxlength="30" autocomplete="off">
     <div class="modal-actions">
       <button class="btn-cancel" id="edit-name-cancel">Cancel</button>
-      <button class="btn-vote" id="edit-name-save">Save</button>
+      <button class="btn-vote" id="edit-name-save" disabled>Save</button>
     </div>
   </div>
 </div>
@@ -516,15 +531,17 @@
 
       <div class="admin-divider"></div>
 
+      <!-- Clear votes: wipes all server votes, keeps question & options -->
       <button class="danger-btn" id="clear-votes-btn">Clear votes</button>
 
+      <!-- Advanced: nuclear option -->
       <button class="advanced-toggle" id="advanced-toggle">
         <span class="advanced-chevron" id="advanced-chevron">▶</span>
         Advanced
       </button>
       <div class="advanced-content" id="advanced-content">
-        <p class="advanced-desc">Removes the name saved in this browser. Use only if someone needs to vote under a different identity on this device.</p>
-        <button class="danger-btn-sm" id="clear-identity-btn">Reset stored identity</button>
+        <p class="advanced-desc">Wipes every vote from the server and clears the saved name on this device. All participants will need to vote again. This cannot be undone.</p>
+        <button class="danger-btn-nuke" id="clear-all-btn">Danger: clear all memory</button>
       </div>
 
       <button class="save-btn" id="save-admin-btn">Save &amp; close</button>
@@ -548,67 +565,30 @@
 
 <script>
   // ── Constants ────────────────────────────────────────────────────
-  const NAME_KEY     = 'poll_name';   // the ONLY localStorage key
-  const DEFAULT_Q    = 'When can we meet?';
-  const DEFAULT_TYPE = 'multiple';
-  const ANIM_MS      = 450;
+  const NAME_KEY      = 'poll_name';   // the ONLY localStorage key
+  const DEFAULT_Q     = 'When can we meet?';
+  const DEFAULT_TYPE  = 'multiple';
+  const ANIM_MS       = 450;
   const DOUBLE_TAP_MS = 300;
 
   // ── State ────────────────────────────────────────────────────────
-  // Server is the single source of truth. OPTIONS and question/type
-  // are always loaded from /api/poll and never written to localStorage.
   let currentQuestion = DEFAULT_Q;
   let currentVoteType = DEFAULT_TYPE;
-  const OPTIONS       = [];            // [{ id, text, voters:[{name,ts}] }]
+  const OPTIONS       = [];   // [{ id:string, text:string, voters:[{name,ts}] }]
 
   let userName      = localStorage.getItem(NAME_KEY) || null;
-  let userVotes     = new Set();       // option IDs the current user has voted for
+  let userVotes     = new Set();   // option IDs the current user has voted for
   let pendingVoteId = null;
 
-  let _animating    = false;
-  let _needRender   = false;
-  let _lastTapTime  = 0;
+  // Animation gate — prevents a mid-animation re-render from
+  // interrupting the bar transition.
+  let _animating       = false;
+  let _needRender      = false;
+  let _animSafetyTimer = null;   // safety valve in case timer misfires
 
-  // ── Server API ───────────────────────────────────────────────────
-  async function apiFetch(method, url, body) {
-    try {
-      const opts = { method, headers: { 'Content-Type': 'application/json' } };
-      if (body !== undefined) opts.body = JSON.stringify(body);
-      const res = await fetch(url, opts);
-      if (!res.ok) return null;
-      return await res.json();
-    } catch {
-      return null; // server unavailable (e.g. opened as a local file)
-    }
-  }
-
-  // Apply a full poll response from the server into local state.
-  // Does NOT call render() — caller decides when to render.
-  function applyPoll(data) {
-    if (!data) return;
-    currentQuestion = data.question  || DEFAULT_Q;
-    currentVoteType = data.voteType  || DEFAULT_TYPE;
-    OPTIONS.length = 0;
-    (data.options || []).forEach(o =>
-      OPTIONS.push({ id: String(o.id), text: o.text, voters: o.voters || [] })
-    );
-    // Derive which options the current user has voted for
-    userVotes = new Set(
-      OPTIONS.filter(o => o.voters.some(v => v.name === userName)).map(o => o.id)
-    );
-    document.getElementById('poll-question').textContent = currentQuestion;
-    document.getElementById('vt-label').textContent =
-      currentVoteType === 'one' ? 'Select one' : 'Select multiple';
-  }
-
-  // ── Bootstrap: load from server ──────────────────────────────────
-  async function init() {
-    const data = await apiFetch('GET', '/api/poll');
-    applyPoll(data);
-    render();
-  }
-
-  init();
+  // Double-tap guard — 300 ms blocks accidental re-taps; intentional
+  // "change of mind" taps (>300 ms) are queued by the animation gate.
+  let _lastTapTime = 0;
 
   // ── Helpers ──────────────────────────────────────────────────────
   const COLORS = [
@@ -629,6 +609,83 @@
     return str ? str.charAt(0).toUpperCase() + str.slice(1) : str;
   }
 
+  function localTs() {
+    const d  = new Date();
+    const mo = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    return `${d.getDate()} ${mo[d.getMonth()]}, ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+  }
+
+  // Case-insensitive search across all voter names in OPTIONS.
+  // Returns the canonical stored name if found, otherwise null.
+  function findStoredName(input) {
+    const lower = input.toLowerCase();
+    for (const opt of OPTIONS) {
+      for (const v of opt.voters) {
+        if (v.name.toLowerCase() === lower) return v.name;
+      }
+    }
+    return null;
+  }
+
+  // Update the footer name button to reflect current identity.
+  function refreshNameBtn() {
+    document.getElementById('open-edit-name').textContent =
+      userName || 'Set name';
+  }
+
+  // ── Server API ───────────────────────────────────────────────────
+  async function apiFetch(method, url, body) {
+    try {
+      const opts = { method, headers: { 'Content-Type': 'application/json' } };
+      if (body !== undefined) opts.body = JSON.stringify(body);
+      const res = await fetch(url, opts);
+      if (!res.ok) {
+        console.warn(`[apiFetch] ${method} ${url} → ${res.status}`);
+        return null;
+      }
+      return await res.json();
+    } catch (err) {
+      console.warn(`[apiFetch] ${method} ${url} failed:`, err.message);
+      return null;
+    }
+  }
+
+  // Apply a full poll response from the server into local state.
+  // Recomputes userVotes against the current userName.
+  // Does NOT call render() — caller decides.
+  function applyPoll(data) {
+    if (!data) return;
+    currentQuestion = data.question  || DEFAULT_Q;
+    currentVoteType = data.voteType  || DEFAULT_TYPE;
+    OPTIONS.length  = 0;
+    (data.options || []).forEach(o =>
+      OPTIONS.push({ id: String(o.id), text: o.text, voters: Array.isArray(o.voters) ? o.voters : [] })
+    );
+    // Derive selection state for the current user
+    if (userName) {
+      userVotes = new Set(
+        OPTIONS
+          .filter(o => o.voters.some(v => v.name === userName))
+          .map(o => o.id)
+      );
+    } else {
+      userVotes = new Set();
+    }
+    document.getElementById('poll-question').textContent = currentQuestion;
+    document.getElementById('vt-label').textContent =
+      currentVoteType === 'one' ? 'Select one' : 'Select multiple';
+  }
+
+  // ── Bootstrap ────────────────────────────────────────────────────
+  async function init() {
+    const data = await apiFetch('GET', '/api/poll');
+    applyPoll(data);
+    refreshNameBtn();
+    render();
+  }
+
+  init();
+
   // ── Render ───────────────────────────────────────────────────────
   function render() {
     if (_animating) { _needRender = true; return; }
@@ -638,6 +695,16 @@
   function _doRender() {
     _animating  = true;
     _needRender = false;
+
+    // Safety valve: if the animation timer misfires (e.g. tab hidden),
+    // release the gate after 2× the animation duration.
+    clearTimeout(_animSafetyTimer);
+    _animSafetyTimer = setTimeout(() => {
+      if (_animating) {
+        _animating = false;
+        if (_needRender) { _needRender = false; _doRender(); }
+      }
+    }, ANIM_MS * 2 + 100);
 
     const container = document.getElementById('options');
     const max       = OPTIONS.length ? Math.max(...OPTIONS.map(o => o.voters.length), 1) : 1;
@@ -690,11 +757,13 @@
         bar.style.width      = bar.dataset.pct + '%';
       });
       setTimeout(() => {
+        clearTimeout(_animSafetyTimer);
         _animating = false;
         if (_needRender) { _needRender = false; _doRender(); }
       }, ANIM_MS + 20);
     }));
 
+    // Re-attach event listeners
     container.querySelectorAll('.option').forEach(el => {
       el.querySelector('.radio').addEventListener('click', e => {
         e.stopPropagation();
@@ -713,7 +782,7 @@
   // ── Vote logic ───────────────────────────────────────────────────
   function handleVote(optId) {
     const now = Date.now();
-    if (now - _lastTapTime < DOUBLE_TAP_MS) return;
+    if (now - _lastTapTime < DOUBLE_TAP_MS) return; // accidental double-tap
     _lastTapTime = now;
 
     if (currentVoteType === 'one' && userVotes.has(optId)) return;
@@ -725,41 +794,32 @@
     const opt = OPTIONS.find(o => o.id === optId);
     if (!opt) return;
 
-    // Optimistic update — immediate visual feedback
+    // Optimistic update for instant visual feedback
     if (currentVoteType === 'one') {
       OPTIONS.forEach(o => { o.voters = o.voters.filter(v => v.name !== name); });
       userVotes.clear();
-      const ts = _localTs();
+      opt.voters.push({ name, ts: localTs() });
       userVotes.add(optId);
-      opt.voters.push({ name, ts });
     } else {
       if (userVotes.has(optId)) {
         userVotes.delete(optId);
         opt.voters = opt.voters.filter(v => v.name !== name);
       } else {
-        const ts = _localTs();
+        if (!opt.voters.some(v => v.name === name)) opt.voters.push({ name, ts: localTs() });
         userVotes.add(optId);
-        if (!opt.voters.some(v => v.name === name)) opt.voters.push({ name, ts });
       }
     }
     render();
 
-    // Sync to server — server response is authoritative (picks up other users' votes)
+    // Sync to server — response is authoritative and may include other users' concurrent votes
     const data = await apiFetch('POST', '/api/vote', { voterName: name, optionId: optId });
     if (data) {
       applyPoll(data);
-      // Only re-render if state differs from optimistic (avoids double animation)
-      render();
+      render(); // animation gate ensures this runs only after current animation ends
     }
   }
 
-  function _localTs() {
-    const d  = new Date();
-    const mo = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-    return `${d.getDate()} ${mo[d.getMonth()]}, ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
-  }
-
-  // ── Name-entry modal ─────────────────────────────────────────────
+  // ── Name-entry modal (first-time) ────────────────────────────────
   const nameInput = document.getElementById('name-input');
   const btnVote   = document.getElementById('btn-vote');
 
@@ -775,18 +835,20 @@
     pendingVoteId    = null;
   }
 
-  nameInput.addEventListener('input', e => {
-    if (e.target.value.length > 0) e.target.value = capitaliseName(e.target.value);
-    btnVote.disabled = !e.target.value.trim();
+  nameInput.addEventListener('input', () => {
+    btnVote.disabled = !nameInput.value.trim();
   });
 
   btnVote.addEventListener('click', () => {
-    const name = nameInput.value.trim();
-    if (!name) return;
-    userName = capitaliseName(name);
+    const raw = nameInput.value.trim();
+    if (!raw) return;
+    // Reclaim existing name case-insensitively, otherwise capitalise fresh entry
+    const canonical = findStoredName(raw);
+    userName = canonical || capitaliseName(raw);
     localStorage.setItem(NAME_KEY, userName);
     const voteTarget = pendingVoteId;
     closeModal();
+    refreshNameBtn();
     commitVote(userName, voteTarget);
   });
 
@@ -796,16 +858,16 @@
     if (e.target === e.currentTarget) closeModal();
   });
 
-  // ── Edit name modal ──────────────────────────────────────────────
+  // ── Edit / Reclaim name modal ────────────────────────────────────
   const editNameInput  = document.getElementById('edit-name-input');
   const editNameSave   = document.getElementById('edit-name-save');
   const editNameCancel = document.getElementById('edit-name-cancel');
 
   function openEditNameModal() {
     editNameInput.value   = userName || '';
-    editNameSave.disabled = !(userName || '').trim();
+    editNameSave.disabled = false; // always allow typing
     document.getElementById('edit-name-overlay').classList.add('show');
-    setTimeout(() => editNameInput.focus(), 150);
+    setTimeout(() => { editNameInput.focus(); editNameInput.select(); }, 150);
   }
 
   function closeEditNameModal() {
@@ -813,21 +875,35 @@
     editNameInput.value = '';
   }
 
-  editNameInput.addEventListener('input', e => {
-    if (e.target.value.length > 0) e.target.value = capitaliseName(e.target.value);
-    editNameSave.disabled = !e.target.value.trim();
+  editNameInput.addEventListener('input', () => {
+    editNameSave.disabled = !editNameInput.value.trim();
   });
 
-  editNameSave.addEventListener('click', () => {
-    const newName = capitaliseName(editNameInput.value.trim());
-    if (!newName) return;
-    userName = newName;
-    localStorage.setItem(NAME_KEY, newName);
-    // Recompute which options this (new) name has voted for
-    userVotes = new Set(
-      OPTIONS.filter(o => o.voters.some(v => v.name === newName)).map(o => o.id)
-    );
+  editNameSave.addEventListener('click', async () => {
+    const raw = editNameInput.value.trim();
+    if (!raw) return;
+
+    // Case-insensitive reclaim: if someone already voted under this name,
+    // use the canonical stored version so their votes reconnect.
+    const canonical = findStoredName(raw);
+    userName = canonical || capitaliseName(raw);
+    localStorage.setItem(NAME_KEY, userName);
+
     closeEditNameModal();
+    refreshNameBtn();
+
+    // Fetch fresh server state so userVotes is computed against the correct name
+    const data = await apiFetch('GET', '/api/poll');
+    if (data) {
+      applyPoll(data);
+    } else {
+      // Server unavailable — recompute from current OPTIONS
+      userVotes = new Set(
+        OPTIONS
+          .filter(o => o.voters.some(v => v.name === userName))
+          .map(o => o.id)
+      );
+    }
     render();
   });
 
@@ -901,6 +977,12 @@
     document.body.style.overflow = '';
   }
 
+  function setAdminBusy(busy) {
+    document.getElementById('save-admin-btn').disabled   = busy;
+    document.getElementById('clear-votes-btn').disabled  = busy;
+    document.getElementById('clear-all-btn').disabled    = busy;
+  }
+
   function clearAdminForm() {
     document.getElementById('admin-q').value = '';
     setAdminVoteType(DEFAULT_TYPE);
@@ -931,36 +1013,52 @@
       .map(el => el.value.trim()).filter(Boolean);
     if (optTexts.length < 1) { alert('Please add at least one option.'); return; }
 
+    setAdminBusy(true);
     const data = await apiFetch('POST', '/api/admin/config', {
       question: q, voteType: adminVoteType, options: optTexts,
     });
+    setAdminBusy(false);
     applyPoll(data);
     closeAdminPanel();
     render();
   });
 
-  // Clear votes only: save current config → wipe → re-apply config
+  // Clear votes: wipe all server votes, keep question & options intact
   document.getElementById('clear-votes-btn').addEventListener('click', async () => {
     if (!confirm('Clear all votes? This cannot be undone.')) return;
     const savedQ    = currentQuestion;
     const savedType = currentVoteType;
     const savedOpts = OPTIONS.map(o => o.text);
+    setAdminBusy(true);
     await apiFetch('DELETE', '/api/admin/votes');
     const data = await apiFetch('POST', '/api/admin/config', {
       question: savedQ, voteType: savedType, options: savedOpts,
     });
+    setAdminBusy(false);
     applyPoll(data);
     closeAdminPanel();
     render();
   });
 
-  // Reset stored identity: name-only, server-side votes unaffected
-  document.getElementById('clear-identity-btn').addEventListener('click', () => {
-    if (!confirm('Remove the saved name from this browser?')) return;
+  // Danger: clear ALL memory — wipe every server vote + this device's name
+  document.getElementById('clear-all-btn').addEventListener('click', async () => {
+    if (!confirm('This will wipe ALL votes for every participant and clear your saved name. Cannot be undone.')) return;
+    const savedQ    = currentQuestion;
+    const savedType = currentVoteType;
+    const savedOpts = OPTIONS.map(o => o.text);
+    setAdminBusy(true);
+    await apiFetch('DELETE', '/api/admin/votes');
+    const data = await apiFetch('POST', '/api/admin/config', {
+      question: savedQ, voteType: savedType, options: savedOpts,
+    });
+    setAdminBusy(false);
+    // Also clear this device's identity
     userName = null;
-    localStorage.removeItem(NAME_KEY);
     userVotes = new Set();
+    localStorage.removeItem(NAME_KEY);
+    applyPoll(data);
     closeAdminPanel();
+    refreshNameBtn();
     render();
   });
 
