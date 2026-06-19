@@ -636,7 +636,7 @@
   // Keep the footer pill in sync with identity state.
   function refreshNameBtn() {
     document.getElementById('edit-name-label').textContent =
-      userName || 'Edit / Reclaim';
+      userName || 'Reclaim name';
   }
 
   // ── Server API ───────────────────────────────────────────────────
@@ -838,8 +838,15 @@
     const raw = nameInput.value.trim();
     if (!raw) return;
 
-    const canonical = findStoredName(raw);
-    userName = canonical || capitaliseName(raw);
+    // Resolution order:
+    // 1. Canonical name from server voter list (case-insensitive match)
+    // 2. Current localStorage name if it matches input (preserves existing identity
+    //    even when the user hasn't voted yet and OPTIONS is empty)
+    // 3. Fresh capitalised entry
+    const canonical = findStoredName(raw)
+      || (userName && userName.toLowerCase() === raw.toLowerCase() ? userName : null)
+      || capitaliseName(raw);
+    userName = canonical;
     localStorage.setItem(NAME_KEY, userName);
 
     const voteTarget = pendingVoteId;
@@ -1066,17 +1073,4 @@
   function openVotesPanel() {
     renderVotesPanel();
     document.getElementById('votes-panel').classList.add('show');
-    document.body.style.overflow = 'hidden';
-  }
-
-  function closeVotesPanel() {
-    document.getElementById('votes-panel').classList.remove('show');
-    document.body.style.overflow = '';
-  }
-
-  document.getElementById('open-votes').addEventListener('click', openVotesPanel);
-  document.getElementById('close-votes').addEventListener('click', closeVotesPanel);
-</script>
-
-</body>
-</html>
+    document.b
