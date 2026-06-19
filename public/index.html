@@ -121,16 +121,20 @@
 
     /* Shows current user name (or "Set name" if unset) */
     .edit-name-btn {
-      background: none; border: none;
-      color: #8696a0; font-size: 14px; font-weight: 500;
+      background: none;
+      border: 1px solid #2a3942;
+      border-radius: 20px;
+      color: #8696a0; font-size: 13px; font-weight: 500;
       font-family: inherit; cursor: pointer;
-      text-align: left; padding: 0;
-      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-      max-width: 120px;
-      transition: color 0.15s;
+      display: flex; align-items: center; gap: 5px;
+      padding: 5px 10px;
+      white-space: nowrap; overflow: hidden;
+      max-width: 140px;
+      transition: color 0.15s, border-color 0.15s;
     }
 
-    .edit-name-btn:hover { color: #e9edef; }
+    .edit-name-btn:hover { color: #e9edef; border-color: #8696a0; }
+    .edit-name-btn:hover svg path { stroke: #e9edef; }
 
     .view-votes-btn {
       background: none; border: none;
@@ -450,7 +454,12 @@
 
   <!-- Footer: name/edit (left) | View votes (centre) | spacer (right) -->
   <div class="card-footer">
-    <button class="edit-name-btn" id="open-edit-name">Set name</button>
+    <button class="edit-name-btn" id="open-edit-name">
+      <span id="edit-name-label">Set name</span>
+      <svg width="11" height="11" viewBox="0 0 12 12" fill="none" aria-hidden="true" style="flex-shrink:0">
+        <path d="M8.5 1.5L10.5 3.5L4 10H2V8L8.5 1.5Z" stroke="#8696a0" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    </button>
     <button class="view-votes-btn" id="open-votes">View votes</button>
     <div></div>
   </div>
@@ -629,7 +638,7 @@
 
   // Update the footer name button to reflect current identity.
   function refreshNameBtn() {
-    document.getElementById('open-edit-name').textContent =
+    document.getElementById('edit-name-label').textContent =
       userName || 'Set name';
   }
 
@@ -1104,19 +1113,4 @@
   }
 
   function openVotesPanel() {
-    renderVotesPanel();
-    document.getElementById('votes-panel').classList.add('show');
-    document.body.style.overflow = 'hidden';
-  }
-
-  function closeVotesPanel() {
-    document.getElementById('votes-panel').classList.remove('show');
-    document.body.style.overflow = '';
-  }
-
-  document.getElementById('open-votes').addEventListener('click', openVotesPanel);
-  document.getElementById('close-votes').addEventListener('click', closeVotesPanel);
-</script>
-
-</body>
-</html>
+    renderVo
