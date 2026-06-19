@@ -58,6 +58,7 @@
       background: #8696a0;
       flex-shrink: 0;
       display: flex; align-items: center; justify-content: center;
+      pointer-events: none;
     }
 
     .vt-label { color: #8696a0; font-size: 13px; }
@@ -85,6 +86,7 @@
       cursor: pointer;
     }
 
+    .radio svg { pointer-events: none; }
     .radio.selected { background: #25d366; border-color: #25d366; }
     .option-label { color: #e9edef; font-size: 15px; }
 
@@ -103,38 +105,41 @@
       font-size: 7.5px; color: #fff; font-weight: 700;
       position: relative; flex-shrink: 0;
       letter-spacing: -0.3px;
+      pointer-events: none;
     }
 
     .count { font-size: 14px; font-weight: 500; min-width: 12px; text-align: right; }
     .bar-track { background: #2a3942; border-radius: 4px; height: 8px; overflow: hidden; }
     .bar-fill  { background: #25d366; height: 100%; border-radius: 4px; width: 0; }
 
-    /* ── Footer: 3-col grid keeps View votes truly centred ──────── */
+    /* ── Footer: name pill (left) | View votes (right) ─────────── */
     .card-footer {
       border-top: 1px solid #2a3942;
       margin-top: 20px;
       padding: 13px 0;
-      display: grid;
-      grid-template-columns: 1fr auto 1fr;
+      display: flex;
+      justify-content: space-between;
       align-items: center;
     }
 
-    /* Shows current user name (or "Set name" if unset) */
+    /* Name/edit pill — pencil icon + name or fallback label */
     .edit-name-btn {
       background: none;
       border: 1px solid #2a3942;
       border-radius: 20px;
-      color: #8696a0; font-size: 13px; font-weight: 500;
+      color: #8696a0;
+      font-size: 13px; font-weight: 500;
       font-family: inherit; cursor: pointer;
       display: flex; align-items: center; gap: 5px;
-      padding: 5px 10px;
-      white-space: nowrap; overflow: hidden;
-      max-width: 140px;
+      /* Left pad = 8px before text; right pad = 7px after icon (snug wrap) */
+      padding: 5px 7px 5px 8px;
       transition: color 0.15s, border-color 0.15s;
+      /* No overflow:hidden — can block taps on mobile */
+      white-space: nowrap;
     }
 
+    .edit-name-btn svg { pointer-events: none; flex-shrink: 0; }
     .edit-name-btn:hover { color: #e9edef; border-color: #8696a0; }
-    .edit-name-btn:hover svg path { stroke: #e9edef; }
 
     .view-votes-btn {
       background: none; border: none;
@@ -142,7 +147,7 @@
       font-family: inherit; cursor: pointer;
     }
 
-    /* ── Admin row — 100px below footer, flush right ───────────── */
+    /* ── Admin row ─────────────────────────────────────────────── */
     .admin-row {
       display: flex;
       justify-content: flex-end;
@@ -160,8 +165,9 @@
       font-size: 7.5px; font-family: inherit;
     }
 
-    /* ── Modals ───────────────────────────────────────────────────
-       Both name-entry and edit-name share these classes.           */
+    .admin-btn svg { pointer-events: none; }
+
+    /* ── Modals ─────────────────────────────────────────────────── */
     .overlay {
       position: fixed; inset: 0;
       background: rgba(0,0,0,0.65);
@@ -198,13 +204,13 @@
       background: none; border: none; cursor: pointer; padding: 0;
     }
 
-    .btn-vote {
+    .btn-save {
       background: #25d366; border: none; border-radius: 20px;
       color: #111; font-size: 14px; font-weight: 500; font-family: inherit;
       padding: 8px 24px; cursor: pointer; transition: opacity 0.15s;
     }
 
-    .btn-vote:disabled { opacity: 0.4; cursor: default; }
+    .btn-save:disabled { opacity: 0.4; cursor: default; }
 
     /* ── Admin panel ──────────────────────────────────────────── */
     .admin-overlay {
@@ -242,6 +248,8 @@
       color: #e9edef; font-size: 15px; font-weight: 500;
       display: flex; align-items: center; gap: 8px;
     }
+
+    .admin-title svg { pointer-events: none; }
 
     .admin-close {
       background: none; border: none; color: #8696a0;
@@ -312,6 +320,8 @@
       display: flex; align-items: center; gap: 6px;
     }
 
+    .add-opt-btn svg { pointer-events: none; }
+
     .admin-divider { border-top: 1px solid #2a3942; margin: 18px 0 14px; }
 
     .danger-btn {
@@ -337,6 +347,7 @@
       display: inline-block;
       transition: transform 0.2s;
       font-size: 9px;
+      pointer-events: none;
     }
 
     .advanced-chevron.open { transform: rotate(90deg); }
@@ -372,9 +383,7 @@
 
     /* ── Votes panel ──────────────────────────────────────────────
        visibility:hidden prevents iOS rubber-band overscroll from
-       revealing the translated-off-screen panel. The delay on
-       hiding matches the slide-out duration so it vanishes only
-       after the exit animation completes.                         */
+       revealing the translated-off-screen panel.                  */
     .votes-panel {
       position: fixed; inset: 0; background: #111b21;
       z-index: 200; display: flex; flex-direction: column;
@@ -402,6 +411,8 @@
       cursor: pointer; padding: 0; line-height: 1;
       display: flex; align-items: center;
     }
+
+    .back-btn svg { pointer-events: none; }
 
     .votes-panel-title { color: #e9edef; font-size: 17px; font-weight: 500; }
     .votes-body { overflow-y: auto; flex: 1; }
@@ -452,21 +463,23 @@
 
   <div id="options"></div>
 
-  <!-- Footer: name/edit (left) | View votes (centre) | spacer (right) -->
+  <!--
+    Footer: name pill (left) | View votes (right)
+    No third column — space-between handles the layout.
+  -->
   <div class="card-footer">
-    <button class="edit-name-btn" id="open-edit-name">
-      <span id="edit-name-label">Set name</span>
-      <svg width="11" height="11" viewBox="0 0 12 12" fill="none" aria-hidden="true" style="flex-shrink:0">
+    <button class="edit-name-btn" id="open-edit-name" type="button">
+      <span id="edit-name-label">Edit / Reclaim</span>
+      <svg width="11" height="11" viewBox="0 0 12 12" fill="none" aria-hidden="true">
         <path d="M8.5 1.5L10.5 3.5L4 10H2V8L8.5 1.5Z" stroke="#8696a0" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>
       </svg>
     </button>
-    <button class="view-votes-btn" id="open-votes">View votes</button>
-    <div></div>
+    <button class="view-votes-btn" id="open-votes" type="button">View votes</button>
   </div>
 
   <!-- Admin — 100px below footer, flush right -->
   <div class="admin-row">
-    <button class="admin-btn" id="open-admin" aria-label="Admin">
+    <button class="admin-btn" id="open-admin" type="button" aria-label="Admin">
       <svg width="7" height="9" viewBox="0 0 11 13" fill="none" aria-hidden="true">
         <rect x="1" y="5" width="9" height="7.5" rx="1.5" stroke="#5a1a1a" stroke-width="1.4"/>
         <path d="M3.5 5V3.5a2 2 0 0 1 4 0V5" stroke="#5a1a1a" stroke-width="1.4" stroke-linecap="round"/>
@@ -476,27 +489,19 @@
   </div>
 </div>
 
-<!-- Name-entry modal (first-time voters) -->
-<div class="overlay" id="overlay">
-  <div class="modal">
-    <p class="modal-title">Enter your name</p>
-    <input type="text" id="name-input" placeholder="Your name..." maxlength="30" autocomplete="off">
-    <div class="modal-actions">
-      <button class="btn-cancel" id="btn-cancel">Cancel</button>
-      <button class="btn-vote" id="btn-vote" disabled>Vote</button>
-    </div>
-  </div>
-</div>
-
-<!-- Edit / Reclaim name modal -->
-<div class="overlay" id="edit-name-overlay">
+<!--
+  Unified name modal — handles:
+  1. First-time name entry (opened from vote flow, pendingVoteId set)
+  2. Edit / Reclaim (opened from footer pill, pendingVoteId null)
+-->
+<div class="overlay" id="name-modal">
   <div class="modal">
     <p class="modal-title">Edit / Reclaim name</p>
-    <p class="modal-hint">To reclaim your existing votes, type your name as you originally entered it — not case-sensitive.</p>
-    <input type="text" id="edit-name-input" placeholder="Your name..." maxlength="30" autocomplete="off">
+    <p class="modal-hint">Type your name to vote. To reclaim existing votes, use the same name you entered before — not case-sensitive.</p>
+    <input type="text" id="name-input" placeholder="Your name..." maxlength="30" autocomplete="off">
     <div class="modal-actions">
-      <button class="btn-cancel" id="edit-name-cancel">Cancel</button>
-      <button class="btn-vote" id="edit-name-save" disabled>Save</button>
+      <button class="btn-cancel" id="btn-cancel" type="button">Cancel</button>
+      <button class="btn-save" id="btn-save" type="button" disabled>Save</button>
     </div>
   </div>
 </div>
@@ -514,7 +519,7 @@
           </svg>
           Admin Only — please don't touch
         </span>
-        <button class="admin-close" id="close-admin">✕</button>
+        <button class="admin-close" id="close-admin" type="button">✕</button>
       </div>
 
       <label class="admin-label" for="admin-q">QUESTION</label>
@@ -522,16 +527,16 @@
 
       <span class="admin-label">VOTE TYPE</span>
       <div class="type-toggle" id="type-toggle">
-        <button class="toggle-btn active" data-type="multiple">Select multiple</button>
-        <button class="toggle-btn" data-type="one">Select one</button>
+        <button class="toggle-btn active" data-type="multiple" type="button">Select multiple</button>
+        <button class="toggle-btn" data-type="one" type="button">Select one</button>
       </div>
 
       <div class="admin-opts-header">
         <span class="admin-label" style="margin-bottom:0">OPTIONS</span>
-        <button class="clear-form-btn" id="clear-form-btn">Clear all</button>
+        <button class="clear-form-btn" id="clear-form-btn" type="button">Clear all</button>
       </div>
       <div id="admin-opts-list"></div>
-      <button class="add-opt-btn" id="add-opt-btn">
+      <button class="add-opt-btn" id="add-opt-btn" type="button">
         <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden="true">
           <path d="M6.5 1v11M1 6.5h11" stroke="#8696a0" stroke-width="1.5" stroke-linecap="round"/>
         </svg>
@@ -540,20 +545,18 @@
 
       <div class="admin-divider"></div>
 
-      <!-- Clear votes: wipes all server votes, keeps question & options -->
-      <button class="danger-btn" id="clear-votes-btn">Clear votes</button>
+      <button class="danger-btn" id="clear-votes-btn" type="button">Clear votes</button>
 
-      <!-- Advanced: nuclear option -->
-      <button class="advanced-toggle" id="advanced-toggle">
+      <button class="advanced-toggle" id="advanced-toggle" type="button">
         <span class="advanced-chevron" id="advanced-chevron">▶</span>
         Advanced
       </button>
       <div class="advanced-content" id="advanced-content">
         <p class="advanced-desc">Wipes every vote from the server and clears the saved name on this device. All participants will need to vote again. This cannot be undone.</p>
-        <button class="danger-btn-nuke" id="clear-all-btn">Danger: clear all memory</button>
+        <button class="danger-btn-nuke" id="clear-all-btn" type="button">Danger: clear all memory</button>
       </div>
 
-      <button class="save-btn" id="save-admin-btn">Save &amp; close</button>
+      <button class="save-btn" id="save-admin-btn" type="button">Save &amp; close</button>
 
     </div>
   </div>
@@ -562,7 +565,7 @@
 <!-- Votes panel -->
 <div class="votes-panel" id="votes-panel">
   <div class="votes-header">
-    <button class="back-btn" id="close-votes" aria-label="Back">
+    <button class="back-btn" id="close-votes" type="button" aria-label="Back">
       <svg width="22" height="18" viewBox="0 0 22 18" fill="none">
         <path d="M9 1L1 9L9 17M1 9H21" stroke="#e9edef" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
       </svg>
@@ -574,7 +577,7 @@
 
 <script>
   // ── Constants ────────────────────────────────────────────────────
-  const NAME_KEY      = 'poll_name';   // the ONLY localStorage key
+  const NAME_KEY      = 'poll_name';
   const DEFAULT_Q     = 'When can we meet?';
   const DEFAULT_TYPE  = 'multiple';
   const ANIM_MS       = 450;
@@ -583,21 +586,16 @@
   // ── State ────────────────────────────────────────────────────────
   let currentQuestion = DEFAULT_Q;
   let currentVoteType = DEFAULT_TYPE;
-  const OPTIONS       = [];   // [{ id:string, text:string, voters:[{name,ts}] }]
+  const OPTIONS       = [];
 
   let userName      = localStorage.getItem(NAME_KEY) || null;
-  let userVotes     = new Set();   // option IDs the current user has voted for
+  let userVotes     = new Set();
   let pendingVoteId = null;
 
-  // Animation gate — prevents a mid-animation re-render from
-  // interrupting the bar transition.
   let _animating       = false;
   let _needRender      = false;
-  let _animSafetyTimer = null;   // safety valve in case timer misfires
-
-  // Double-tap guard — 300 ms blocks accidental re-taps; intentional
-  // "change of mind" taps (>300 ms) are queued by the animation gate.
-  let _lastTapTime = 0;
+  let _animSafetyTimer = null;
+  let _lastTapTime     = 0;
 
   // ── Helpers ──────────────────────────────────────────────────────
   const COLORS = [
@@ -624,8 +622,7 @@
     return `${d.getDate()} ${mo[d.getMonth()]}, ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
   }
 
-  // Case-insensitive search across all voter names in OPTIONS.
-  // Returns the canonical stored name if found, otherwise null.
+  // Case-insensitive search — returns canonical stored name or null.
   function findStoredName(input) {
     const lower = input.toLowerCase();
     for (const opt of OPTIONS) {
@@ -636,10 +633,10 @@
     return null;
   }
 
-  // Update the footer name button to reflect current identity.
+  // Keep the footer pill in sync with identity state.
   function refreshNameBtn() {
     document.getElementById('edit-name-label').textContent =
-      userName || 'Set name';
+      userName || 'Edit / Reclaim';
   }
 
   // ── Server API ───────────────────────────────────────────────────
@@ -649,19 +646,17 @@
       if (body !== undefined) opts.body = JSON.stringify(body);
       const res = await fetch(url, opts);
       if (!res.ok) {
-        console.warn(`[apiFetch] ${method} ${url} → ${res.status}`);
+        console.warn('[apiFetch]', method, url, res.status);
         return null;
       }
       return await res.json();
     } catch (err) {
-      console.warn(`[apiFetch] ${method} ${url} failed:`, err.message);
+      console.warn('[apiFetch]', method, url, err.message);
       return null;
     }
   }
 
-  // Apply a full poll response from the server into local state.
-  // Recomputes userVotes against the current userName.
-  // Does NOT call render() — caller decides.
+  // Sync server response into local state. Does NOT call render().
   function applyPoll(data) {
     if (!data) return;
     currentQuestion = data.question  || DEFAULT_Q;
@@ -670,16 +665,9 @@
     (data.options || []).forEach(o =>
       OPTIONS.push({ id: String(o.id), text: o.text, voters: Array.isArray(o.voters) ? o.voters : [] })
     );
-    // Derive selection state for the current user
-    if (userName) {
-      userVotes = new Set(
-        OPTIONS
-          .filter(o => o.voters.some(v => v.name === userName))
-          .map(o => o.id)
-      );
-    } else {
-      userVotes = new Set();
-    }
+    userVotes = userName
+      ? new Set(OPTIONS.filter(o => o.voters.some(v => v.name === userName)).map(o => o.id))
+      : new Set();
     document.getElementById('poll-question').textContent = currentQuestion;
     document.getElementById('vt-label').textContent =
       currentVoteType === 'one' ? 'Select one' : 'Select multiple';
@@ -705,8 +693,6 @@
     _animating  = true;
     _needRender = false;
 
-    // Safety valve: if the animation timer misfires (e.g. tab hidden),
-    // release the gate after 2× the animation duration.
     clearTimeout(_animSafetyTimer);
     _animSafetyTimer = setTimeout(() => {
       if (_animating) {
@@ -728,7 +714,7 @@
       const isLast   = i === OPTIONS.length - 1;
 
       const radioInner = selected
-        ? `<svg width="10" height="8" viewBox="0 0 10 8" fill="none">
+        ? `<svg width="10" height="8" viewBox="0 0 10 8" fill="none" style="pointer-events:none">
              <path d="M1 3.5L4 6.5L9 1" stroke="#111" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
            </svg>`
         : '';
@@ -772,7 +758,6 @@
       }, ANIM_MS + 20);
     }));
 
-    // Re-attach event listeners
     container.querySelectorAll('.option').forEach(el => {
       el.querySelector('.radio').addEventListener('click', e => {
         e.stopPropagation();
@@ -791,19 +776,21 @@
   // ── Vote logic ───────────────────────────────────────────────────
   function handleVote(optId) {
     const now = Date.now();
-    if (now - _lastTapTime < DOUBLE_TAP_MS) return; // accidental double-tap
+    if (now - _lastTapTime < DOUBLE_TAP_MS) return;
     _lastTapTime = now;
-
     if (currentVoteType === 'one' && userVotes.has(optId)) return;
     pendingVoteId = optId;
-    userName ? commitVote(userName, optId) : openModal();
+    if (userName) {
+      commitVote(userName, optId);
+    } else {
+      openNameModal();
+    }
   }
 
   async function commitVote(name, optId) {
     const opt = OPTIONS.find(o => o.id === optId);
     if (!opt) return;
 
-    // Optimistic update for instant visual feedback
     if (currentVoteType === 'one') {
       OPTIONS.forEach(o => { o.voters = o.voters.filter(v => v.name !== name); });
       userVotes.clear();
@@ -820,108 +807,78 @@
     }
     render();
 
-    // Sync to server — response is authoritative and may include other users' concurrent votes
     const data = await apiFetch('POST', '/api/vote', { voterName: name, optionId: optId });
-    if (data) {
-      applyPoll(data);
-      render(); // animation gate ensures this runs only after current animation ends
-    }
+    if (data) { applyPoll(data); render(); }
   }
 
-  // ── Name-entry modal (first-time) ────────────────────────────────
+  // ── Unified name modal ───────────────────────────────────────────
   const nameInput = document.getElementById('name-input');
-  const btnVote   = document.getElementById('btn-vote');
+  const btnSave   = document.getElementById('btn-save');
+  const nameModal = document.getElementById('name-modal');
 
-  function openModal() {
-    document.getElementById('overlay').classList.add('show');
-    setTimeout(() => nameInput.focus(), 150);
+  function openNameModal() {
+    nameInput.value  = userName || '';
+    btnSave.disabled = !nameInput.value.trim();
+    nameModal.classList.add('show');
+    setTimeout(() => { nameInput.focus(); if (userName) nameInput.select(); }, 150);
   }
 
-  function closeModal() {
-    document.getElementById('overlay').classList.remove('show');
+  function closeNameModal() {
+    nameModal.classList.remove('show');
     nameInput.value  = '';
-    btnVote.disabled = true;
-    pendingVoteId    = null;
+    btnSave.disabled = true;
+    // Don't clear pendingVoteId here — caller decides
   }
 
   nameInput.addEventListener('input', () => {
-    btnVote.disabled = !nameInput.value.trim();
+    btnSave.disabled = !nameInput.value.trim();
   });
 
-  btnVote.addEventListener('click', () => {
+  btnSave.addEventListener('click', async () => {
     const raw = nameInput.value.trim();
     if (!raw) return;
-    // Reclaim existing name case-insensitively, otherwise capitalise fresh entry
+
     const canonical = findStoredName(raw);
     userName = canonical || capitaliseName(raw);
     localStorage.setItem(NAME_KEY, userName);
+
     const voteTarget = pendingVoteId;
-    closeModal();
-    refreshNameBtn();
-    commitVote(userName, voteTarget);
-  });
-
-  nameInput.addEventListener('keydown', e => { if (e.key === 'Enter') btnVote.click(); });
-  document.getElementById('btn-cancel').addEventListener('click', closeModal);
-  document.getElementById('overlay').addEventListener('click', e => {
-    if (e.target === e.currentTarget) closeModal();
-  });
-
-  // ── Edit / Reclaim name modal ────────────────────────────────────
-  const editNameInput  = document.getElementById('edit-name-input');
-  const editNameSave   = document.getElementById('edit-name-save');
-  const editNameCancel = document.getElementById('edit-name-cancel');
-
-  function openEditNameModal() {
-    editNameInput.value   = userName || '';
-    editNameSave.disabled = false; // always allow typing
-    document.getElementById('edit-name-overlay').classList.add('show');
-    setTimeout(() => { editNameInput.focus(); editNameInput.select(); }, 150);
-  }
-
-  function closeEditNameModal() {
-    document.getElementById('edit-name-overlay').classList.remove('show');
-    editNameInput.value = '';
-  }
-
-  editNameInput.addEventListener('input', () => {
-    editNameSave.disabled = !editNameInput.value.trim();
-  });
-
-  editNameSave.addEventListener('click', async () => {
-    const raw = editNameInput.value.trim();
-    if (!raw) return;
-
-    // Case-insensitive reclaim: if someone already voted under this name,
-    // use the canonical stored version so their votes reconnect.
-    const canonical = findStoredName(raw);
-    userName = canonical || capitaliseName(raw);
-    localStorage.setItem(NAME_KEY, userName);
-
-    closeEditNameModal();
+    pendingVoteId = null;
+    closeNameModal();
     refreshNameBtn();
 
-    // Fetch fresh server state so userVotes is computed against the correct name
-    const data = await apiFetch('GET', '/api/poll');
-    if (data) {
-      applyPoll(data);
+    if (voteTarget) {
+      // Opened from vote flow — commit the queued vote
+      commitVote(userName, voteTarget);
     } else {
-      // Server unavailable — recompute from current OPTIONS
-      userVotes = new Set(
-        OPTIONS
-          .filter(o => o.voters.some(v => v.name === userName))
-          .map(o => o.id)
-      );
+      // Opened from footer pill — just refresh identity
+      const data = await apiFetch('GET', '/api/poll');
+      if (data) {
+        applyPoll(data);
+      } else {
+        userVotes = new Set(
+          OPTIONS.filter(o => o.voters.some(v => v.name === userName)).map(o => o.id)
+        );
+      }
+      render();
     }
-    render();
   });
 
-  editNameInput.addEventListener('keydown', e => { if (e.key === 'Enter') editNameSave.click(); });
-  editNameCancel.addEventListener('click', closeEditNameModal);
-  document.getElementById('edit-name-overlay').addEventListener('click', e => {
-    if (e.target === e.currentTarget) closeEditNameModal();
+  nameInput.addEventListener('keydown', e => { if (e.key === 'Enter') btnSave.click(); });
+
+  document.getElementById('btn-cancel').addEventListener('click', () => {
+    pendingVoteId = null;
+    closeNameModal();
   });
-  document.getElementById('open-edit-name').addEventListener('click', openEditNameModal);
+
+  nameModal.addEventListener('click', e => {
+    if (e.target === e.currentTarget) { pendingVoteId = null; closeNameModal(); }
+  });
+
+  document.getElementById('open-edit-name').addEventListener('click', () => {
+    pendingVoteId = null; // footer pill — no pending vote
+    openNameModal();
+  });
 
   // ── Admin panel ──────────────────────────────────────────────────
   let adminVoteType = DEFAULT_TYPE;
@@ -987,9 +944,9 @@
   }
 
   function setAdminBusy(busy) {
-    document.getElementById('save-admin-btn').disabled   = busy;
-    document.getElementById('clear-votes-btn').disabled  = busy;
-    document.getElementById('clear-all-btn').disabled    = busy;
+    document.getElementById('save-admin-btn').disabled  = busy;
+    document.getElementById('clear-votes-btn').disabled = busy;
+    document.getElementById('clear-all-btn').disabled   = busy;
   }
 
   function clearAdminForm() {
@@ -1003,8 +960,7 @@
   document.getElementById('advanced-toggle').addEventListener('click', () => {
     const content = document.getElementById('advanced-content');
     const chevron = document.getElementById('advanced-chevron');
-    const isOpen  = content.classList.toggle('show');
-    chevron.classList.toggle('open', isOpen);
+    chevron.classList.toggle('open', content.classList.toggle('show'));
   });
 
   typeToggle.querySelectorAll('.toggle-btn').forEach(btn =>
@@ -1017,11 +973,9 @@
   document.getElementById('save-admin-btn').addEventListener('click', async () => {
     const q = document.getElementById('admin-q').value.trim();
     if (!q) { alert('Please enter a question.'); return; }
-
     const optTexts = Array.from(adminOptsList.querySelectorAll('.admin-opt-input'))
       .map(el => el.value.trim()).filter(Boolean);
     if (optTexts.length < 1) { alert('Please add at least one option.'); return; }
-
     setAdminBusy(true);
     const data = await apiFetch('POST', '/api/admin/config', {
       question: q, voteType: adminVoteType, options: optTexts,
@@ -1032,7 +986,6 @@
     render();
   });
 
-  // Clear votes: wipe all server votes, keep question & options intact
   document.getElementById('clear-votes-btn').addEventListener('click', async () => {
     if (!confirm('Clear all votes? This cannot be undone.')) return;
     const savedQ    = currentQuestion;
@@ -1049,7 +1002,6 @@
     render();
   });
 
-  // Danger: clear ALL memory — wipe every server vote + this device's name
   document.getElementById('clear-all-btn').addEventListener('click', async () => {
     if (!confirm('This will wipe ALL votes for every participant and clear your saved name. Cannot be undone.')) return;
     const savedQ    = currentQuestion;
@@ -1061,7 +1013,6 @@
       question: savedQ, voteType: savedType, options: savedOpts,
     });
     setAdminBusy(false);
-    // Also clear this device's identity
     userName = null;
     userVotes = new Set();
     localStorage.removeItem(NAME_KEY);
@@ -1080,7 +1031,7 @@
   // ── Votes panel ──────────────────────────────────────────────────
   function renderVotesPanel() {
     const uniqueVoters = new Set(OPTIONS.flatMap(o => o.voters.map(v => v.name)));
-    const total        = uniqueVoters.size;
+    const total = uniqueVoters.size;
 
     const sectionsHtml = OPTIONS.map(opt => {
       const rowsHtml = opt.voters.length === 0
@@ -1113,4 +1064,19 @@
   }
 
   function openVotesPanel() {
-    renderVo
+    renderVotesPanel();
+    document.getElementById('votes-panel').classList.add('show');
+    document.body.style.overflow = 'hidden';
+  }
+
+  function closeVotesPanel() {
+    document.getElementById('votes-panel').classList.remove('show');
+    document.body.style.overflow = '';
+  }
+
+  document.getElementById('open-votes').addEventListener('click', openVotesPanel);
+  document.getElementById('close-votes').addEventListener('click', closeVotesPanel);
+</script>
+
+</body>
+</html>
