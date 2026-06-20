@@ -174,10 +174,15 @@
       display: flex; align-items: center; justify-content: center;
       padding: 20px; z-index: 100;
       opacity: 0; pointer-events: none;
-      transition: opacity 0.2s;
+      visibility: hidden;
+      transition: opacity 0.2s, visibility 0s linear 0.2s;
     }
 
-    .overlay.show { opacity: 1; pointer-events: all; }
+    .overlay.show {
+      opacity: 1; pointer-events: all;
+      visibility: visible;
+      transition: opacity 0.2s, visibility 0s linear 0s;
+    }
 
     .modal {
       background: #1f2c33; border-radius: 14px; padding: 22px 24px;
@@ -219,8 +224,6 @@
       display: flex; align-items: flex-end; justify-content: center;
       padding: 12px; z-index: 300;
       opacity: 0; pointer-events: none;
-      /* visibility:hidden after the fade-out so the admin-panel child
-         cannot intercept clicks on the page beneath it */
       visibility: hidden;
       transition: opacity 0.2s, visibility 0s linear 0.2s;
     }
@@ -1071,4 +1074,26 @@
 
     document.getElementById('votes-body').innerHTML = `
       <div class="votes-question-block">
-        <p class="votes-question">${curr
+        <p class="votes-question">${currentQuestion}</p>
+        <p class="votes-summary">${total} member${total !== 1 ? 's' : ''} voted</p>
+      </div>
+      ${sectionsHtml}`;
+  }
+
+  function openVotesPanel() {
+    renderVotesPanel();
+    document.getElementById('votes-panel').classList.add('show');
+    document.body.style.overflow = 'hidden';
+  }
+
+  function closeVotesPanel() {
+    document.getElementById('votes-panel').classList.remove('show');
+    document.body.style.overflow = '';
+  }
+
+  document.getElementById('open-votes').addEventListener('click', openVotesPanel);
+  document.getElementById('close-votes').addEventListener('click', closeVotesPanel);
+</script>
+
+</body>
+</html>
