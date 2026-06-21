@@ -5,6 +5,7 @@ services:
       - "3000:3000"
     volumes:
       - poll-data:/data      # SQLite file lives here — persists across restarts
+      - ./public:/app/public # serve index.html live from disk — edits show on refresh, no rebuild
     environment:
       - PORT=3000
       - DATA_DIR=/data
