@@ -591,7 +591,7 @@
   const DEFAULT_Q     = 'When can we meet?';
   const DEFAULT_TYPE  = 'multiple';
   const ANIM_MS       = 450;
-  const DOUBLE_TAP_MS = 300;
+  const DOUBLE_TAP_MS = 100;
 
   // ── State ────────────────────────────────────────────────────────
   let currentQuestion = DEFAULT_Q;
@@ -602,10 +602,11 @@
   let userVotes     = new Set();
   let pendingVoteId = null;
 
-  let _animating       = false;
-  let _needRender      = false;
-  let _animSafetyTimer = null;
   let _lastTapTime     = 0;
+  let _renderedSig     = null;   // structure signature of the last full render
+  let _delegationBound = false;  // #options click delegation attached once
+  let _optionsEl       = null;   // cached #options container
+  function optionsEl() { return _optionsEl || (_optionsEl = document.getElementById('options')); }
 
   // ── Helpers ──────────────────────────────────────────────────────
   const COLORS = [
@@ -694,92 +695,143 @@
   init();
 
   // ── Render ───────────────────────────────────────────────────────
-  function render() {
-    if (_animating) { _needRender = true; return; }
-    _doRender();
+  // Two-tier rendering:
+  //   • fullRender()    — rebuilds the option DOM. Used on first paint and
+  //                       whenever the *structure* changes (option added/
+  //                       removed/renamed, question or vote-type changed).
+  //   • inPlaceUpdate() — same structure, only counts changed. Updates
+  //                       counts/badges/checkmarks and re-targets each bar's
+  //                       width WITHOUT recreating the element. Because each
+  //                       bar keeps its CSS width-transition, setting a new
+  //                       target makes the browser redirect smoothly from the
+  //                       bar's current (possibly mid-animation) position to
+  //                       the new target. So tapping B while A is still
+  //                       animating just sends both bars toward the latest
+  //                       state from wherever they are — no restart, no jump.
+  // There is no render lock: every render reflects the most up-to-date state.
+
+  function structureSig() {
+    return JSON.stringify({
+      q: currentQuestion,
+      t: currentVoteType,
+      o: OPTIONS.map(o => ({ id: o.id, text: o.text }))
+    });
   }
 
-  function _doRender() {
-    _animating  = true;
-    _needRender = false;
+  function render() {
+    const sig = structureSig();
+    if (sig !== _renderedSig) {
+      _renderedSig = sig;
+      fullRender();
+    } else {
+      inPlaceUpdate();
+    }
+  }
 
-    clearTimeout(_animSafetyTimer);
-    _animSafetyTimer = setTimeout(() => {
-      if (_animating) {
-        _animating = false;
-        if (_needRender) { _needRender = false; _doRender(); }
-      }
-    }, ANIM_MS * 2 + 100);
+  function bindDelegation() {
+    if (_delegationBound) return;
+    _delegationBound = true;
+    optionsEl().addEventListener('click', e => {
+      const optionEl = e.target.closest('.option');
+      if (!optionEl) return;
+      if (e.target.closest('.badges')) { openVotesPanel(); return; }
+      if (e.target.closest('.radio'))  { handleVote(optionEl.dataset.id); }
+    });
+  }
 
-    const container = document.getElementById('options');
-    const max       = OPTIONS.length ? Math.max(...OPTIONS.map(o => o.voters.length), 1) : 1;
+  function maxCount() {
+    return OPTIONS.length ? Math.max(...OPTIONS.map(o => o.voters.length), 1) : 1;
+  }
 
-    const oldWidths = Array.from(container.querySelectorAll('.bar-fill'))
-      .map(el => parseFloat(el.style.width) || 0);
+  function radioSvg(selected) {
+    return selected
+      ? `<svg width="10" height="8" viewBox="0 0 10 8" fill="none" style="pointer-events:none">
+           <path d="M1 3.5L4 6.5L9 1" stroke="#111" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+         </svg>`
+      : '';
+  }
+
+  function rightMarkup(opt) {
+    const count = opt.voters.length;
+    const shown = opt.voters.slice(-5);
+    const badgesHtml = shown.map((v, bi) =>
+      `<div class="badge" style="background:${colorFor(v.name)};${bi > 0 ? 'margin-left:-9px;' : ''}z-index:${shown.length - bi}">${initials(v.name)}</div>`
+    ).join('');
+    return `${count > 0 ? `<div class="badges">${badgesHtml}</div>` : ''}` +
+           `<span class="count" style="color:${count > 0 ? '#e9edef' : '#8696a0'}">${count}</span>`;
+  }
+
+  function fullRender() {
+    bindDelegation();
+    const container = optionsEl();
+    const max       = maxCount();
+
+    // Preserve current bar positions so a structure change still animates
+    // from where existing bars were, not from zero.
+    const oldWidths = {};
+    container.querySelectorAll('.option').forEach(el => {
+      const fill = el.querySelector('.bar-fill');
+      if (fill) oldWidths[el.dataset.id] = parseFloat(fill.style.width) || 0;
+    });
 
     container.innerHTML = OPTIONS.map((opt, i) => {
-      const count    = opt.voters.length;
-      const pct      = (count / max) * 100;
+      const pct      = (opt.voters.length / max) * 100;
       const selected = userVotes.has(opt.id);
       const isLast   = i === OPTIONS.length - 1;
-
-      const radioInner = selected
-        ? `<svg width="10" height="8" viewBox="0 0 10 8" fill="none" style="pointer-events:none">
-             <path d="M1 3.5L4 6.5L9 1" stroke="#111" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
-           </svg>`
-        : '';
-
-      const shown      = opt.voters.slice(-5);
-      const badgesHtml = shown.map((v, bi) =>
-        `<div class="badge" style="background:${colorFor(v.name)};${bi > 0 ? 'margin-left:-9px;' : ''}z-index:${shown.length - bi}">${initials(v.name)}</div>`
-      ).join('');
-
       return `
         <div class="option" style="margin-bottom:${isLast ? '0' : '26px'}" data-id="${opt.id}">
           <div class="option-row">
             <div class="option-left">
-              <div class="radio ${selected ? 'selected' : ''}">${radioInner}</div>
+              <div class="radio ${selected ? 'selected' : ''}">${radioSvg(selected)}</div>
               <span class="option-label">${opt.text}</span>
             </div>
-            <div class="option-right">
-              ${count > 0 ? `<div class="badges">${badgesHtml}</div>` : ''}
-              <span class="count" style="color:${count > 0 ? '#e9edef' : '#8696a0'}">${count}</span>
-            </div>
+            <div class="option-right">${rightMarkup(opt)}</div>
           </div>
           <div class="bar-track"><div class="bar-fill" data-pct="${pct}"></div></div>
         </div>`;
     }).join('');
 
     const bars = Array.from(container.querySelectorAll('.bar-fill'));
-    bars.forEach((bar, i) => {
+    bars.forEach(bar => {
+      const id = bar.closest('.option').dataset.id;
       bar.style.transition = 'none';
-      bar.style.width      = (oldWidths[i] ?? 0) + '%';
+      bar.style.width      = (oldWidths[id] ?? 0) + '%';
     });
 
+    // Next frame: enable the transition and move to target so bars grow in.
     requestAnimationFrame(() => requestAnimationFrame(() => {
       bars.forEach(bar => {
         bar.style.transition = `width ${ANIM_MS}ms cubic-bezier(0.4, 0, 0.2, 1)`;
         bar.style.width      = bar.dataset.pct + '%';
       });
-      setTimeout(() => {
-        clearTimeout(_animSafetyTimer);
-        _animating = false;
-        if (_needRender) { _needRender = false; _doRender(); }
-      }, ANIM_MS + 20);
     }));
+  }
 
-    container.querySelectorAll('.option').forEach(el => {
-      el.querySelector('.radio').addEventListener('click', e => {
-        e.stopPropagation();
-        handleVote(el.dataset.id);
-      });
-      const badgesEl = el.querySelector('.badges');
-      if (badgesEl) {
-        badgesEl.addEventListener('click', e => {
-          e.stopPropagation();
-          openVotesPanel();
-        });
+  function inPlaceUpdate() {
+    const container = optionsEl();
+    const max       = maxCount();
+    OPTIONS.forEach(opt => {
+      const el = container.querySelector(`.option[data-id="${CSS.escape(opt.id)}"]`);
+      if (!el) return;
+      const selected = userVotes.has(opt.id);
+      const pct      = (opt.voters.length / max) * 100;
+
+      const radio = el.querySelector('.radio');
+      radio.classList.toggle('selected', selected);
+      radio.innerHTML = radioSvg(selected);
+
+      el.querySelector('.option-right').innerHTML = rightMarkup(opt);
+
+      const bar = el.querySelector('.bar-fill');
+      bar.dataset.pct = pct;
+      // Guarantee a transition exists (a just-completed fullRender may have
+      // left it as 'none' before its rAF re-enabled it).
+      if (!bar.style.transition || bar.style.transition === 'none') {
+        bar.style.transition = `width ${ANIM_MS}ms cubic-bezier(0.4, 0, 0.2, 1)`;
       }
+      // Setting a new target mid-flight makes CSS redirect from the bar's
+      // current interpolated position — graceful interruption, no restart.
+      bar.style.width = pct + '%';
     });
   }
 
